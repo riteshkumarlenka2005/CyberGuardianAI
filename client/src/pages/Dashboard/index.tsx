@@ -1,16 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { BADGES } from '../../constants';
-
-const data = [
-  { name: 'Mon', mistakes: 8, correct: 2 },
-  { name: 'Tue', mistakes: 6, correct: 4 },
-  { name: 'Wed', mistakes: 5, correct: 7 },
-  { name: 'Thu', mistakes: 3, correct: 9 },
-  { name: 'Fri', mistakes: 2, correct: 11 },
-  { name: 'Sat', mistakes: 1, correct: 14 },
-  { name: 'Sun', mistakes: 1, correct: 15 },
-];
+import { UserDataService } from '../../services/userDataService';
+import { UserProgress, Badge, DailyStats } from '../../types';
 
 // --- REUSED FRAME: TechStatCard (Clean Rounded Style) ---
 const TechStatCard = ({ label, value, trend, color, accentColor }: { label: string, value: string, trend: string, color: string, accentColor: string }) => (
@@ -67,8 +58,86 @@ const CyanBracketContainer = ({ children, title }: { children: React.ReactNode, 
   </div>
 );
 
+// Format day name from date string
+const getDayName = (dateStr: string): string => {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('en-US', { weekday: 'short' });
+};
 
 const Dashboard: React.FC = () => {
+  const [progress, setProgress] = useState<UserProgress | null>(null);
+  const [chartData, setChartData] = useState<DailyStats[]>([]);
+  const [score, setScore] = useState<number>(0);
+
+  useEffect(() => {
+    // Load real user data
+    const userProgress = UserDataService.loadProgress();
+    setProgress(userProgress);
+
+    // Get chart data for last 7 days
+    const data = UserDataService.getChartData(7);
+    setChartData(data);
+
+    // Calculate safety score
+    const safetyScore = UserDataService.calculateScore();
+    setScore(safetyScore);
+  }, []);
+
+  // Calculate stats from real data
+  const totalScenarios = progress?.totalSessions || 0;
+  const tacticsLearned = progress?.tacticsLearned.length || 0;
+  const mistakesAvoided = progress ? Math.max(0, progress.totalSessions * 3 - progress.totalMentorInterventions) : 0;
+  const earnedBadges = progress?.badges.filter(b => b.earnedAt !== null) || [];
+  const lockedBadges = progress?.badges.filter(b => b.earnedAt === null) || [];
+
+  // Format chart data
+  const formattedChartData = chartData.map(d => ({
+    name: getDayName(d.date),
+    correct: d.correctDecisions,
+    mistakes: d.mistakesCaught
+  }));
+
+  // Determine trends
+  const getScenarioTrend = () => {
+    if (totalScenarios === 0) return 'Start training!';
+    const recentSessions = chartData.reduce((sum, d) => sum + d.sessionsCompleted, 0);
+    if (recentSessions > 0) return `+${recentSessions} this week`;
+    return 'Continue training';
+  };
+
+  const getTacticsTrend = () => {
+    if (tacticsLearned === 0) return 'Beginner';
+    if (tacticsLearned < 3) return 'Learning';
+    if (tacticsLearned < 5) return 'Advanced';
+    return 'Expert level';
+  };
+
+  const getMistakesTrend = () => {
+    if (totalScenarios === 0) return 'No data yet';
+    const avoidRate = Math.round((mistakesAvoided / (totalScenarios * 3)) * 100);
+    return `${avoidRate}% improvement`;
+  };
+
+  const getScoreTrend = () => {
+    if (score === 0) return 'Get started!';
+    if (score < 200) return 'Rising star';
+    if (score < 500) return 'Making progress';
+    if (score < 800) return 'Top 20%';
+    return 'Top 5%';
+  };
+
+  // Get insight message based on progress
+  const getInsightMessage = () => {
+    if (totalScenarios === 0) {
+      return '"Start your first training session to see your progress here."';
+    }
+    if (tacticsLearned > 0) {
+      const latestTactic = progress?.tacticsLearned[progress.tacticsLearned.length - 1] || 'manipulation';
+      return `"You've learned to recognize ${tacticsLearned} manipulation tactics including ${latestTactic}."`;
+    }
+    return '"Complete more scenarios to unlock insights about your learning progress."';
+  };
+
   return (
     <div className="pt-24 pb-12 bg-slate-50 dark:bg-[#02040a] min-h-screen transition-colors duration-300 font-sans">
 
@@ -89,21 +158,43 @@ const Dashboard: React.FC = () => {
           <div className="hidden md:block text-right">
             <div className="inline-flex items-center px-3 py-1 bg-green-100 dark:bg-green-900/20 rounded border border-green-200 dark:border-green-900/50">
               <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-              <span className="text-[10px] font-bold text-green-700 dark:text-green-400 uppercase tracking-widest">System Online</span>
+              <span className="text-[10px] font-bold text-green-700 dark:text-green-400 uppercase tracking-widest">
+                {progress?.streak ? `${progress.streak} Day Streak` : 'System Online'}
+              </span>
             </div>
           </div>
         </header>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          {[
-            { label: 'Scenarios Completed', value: '12', trend: '+2 this week', color: 'text-blue-600 dark:text-blue-400', accent: 'bg-blue-500' },
-            { label: 'Patterns Learned', value: '24', trend: 'Expert level', color: 'text-purple-600 dark:text-purple-400', accent: 'bg-purple-500' },
-            { label: 'Mistakes Avoided', value: '48', trend: '94% improvement', color: 'text-emerald-600 dark:text-emerald-400', accent: 'bg-emerald-500' },
-            { label: 'Safety Score', value: '820', trend: 'Top 5%', color: 'text-orange-600 dark:text-orange-400', accent: 'bg-orange-500' },
-          ].map((stat, idx) => (
-            <TechStatCard key={idx} label={stat.label} value={stat.value} trend={stat.trend} color={stat.color} accentColor={stat.accent} />
-          ))}
+          <TechStatCard
+            label="Scenarios Completed"
+            value={String(totalScenarios)}
+            trend={getScenarioTrend()}
+            color="text-blue-600 dark:text-blue-400"
+            accentColor="bg-blue-500"
+          />
+          <TechStatCard
+            label="Patterns Learned"
+            value={String(tacticsLearned)}
+            trend={getTacticsTrend()}
+            color="text-purple-600 dark:text-purple-400"
+            accentColor="bg-purple-500"
+          />
+          <TechStatCard
+            label="Correct Decisions"
+            value={String(mistakesAvoided)}
+            trend={getMistakesTrend()}
+            color="text-emerald-600 dark:text-emerald-400"
+            accentColor="bg-emerald-500"
+          />
+          <TechStatCard
+            label="Safety Score"
+            value={String(score)}
+            trend={getScoreTrend()}
+            color="text-orange-600 dark:text-orange-400"
+            accentColor="bg-orange-500"
+          />
         </div>
 
         {/* Charts Row */}
@@ -112,19 +203,28 @@ const Dashboard: React.FC = () => {
           <div className="h-[400px]">
             <MechaContainer title="Learning Curve (7 Days)">
               <div className="h-[280px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.2} />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'monospace' }} dy={10} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'monospace' }} />
-                    <Tooltip
-                      cursor={{ fill: 'rgba(59, 130, 246, 0.05)' }}
-                      contentStyle={{ borderRadius: '0px', border: '1px solid #334155', backgroundColor: '#0f172a', color: '#fff', fontSize: '12px' }}
-                    />
-                    <Bar dataKey="correct" fill="#3b82f6" radius={[2, 2, 0, 0]} barSize={20} />
-                    <Bar dataKey="mistakes" fill="#cbd5e1" className="dark:fill-slate-700" radius={[2, 2, 0, 0]} barSize={20} />
-                  </BarChart>
-                </ResponsiveContainer>
+                {formattedChartData.some(d => d.correct > 0 || d.mistakes > 0) ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={formattedChartData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.2} />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'monospace' }} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'monospace' }} />
+                      <Tooltip
+                        cursor={{ fill: 'rgba(59, 130, 246, 0.05)' }}
+                        contentStyle={{ borderRadius: '0px', border: '1px solid #334155', backgroundColor: '#0f172a', color: '#fff', fontSize: '12px' }}
+                      />
+                      <Bar dataKey="correct" fill="#3b82f6" radius={[2, 2, 0, 0]} barSize={20} name="Correct" />
+                      <Bar dataKey="mistakes" fill="#cbd5e1" className="dark:fill-slate-700" radius={[2, 2, 0, 0]} barSize={20} name="Mistakes" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-slate-400">
+                    <div className="text-center">
+                      <p className="text-2xl mb-2">📊</p>
+                      <p className="text-sm">Complete training sessions to see your progress</p>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="mt-6 flex justify-center space-x-8 border-t border-slate-200 dark:border-slate-800 pt-4">
                 <div className="flex items-center space-x-2">
@@ -133,7 +233,7 @@ const Dashboard: React.FC = () => {
                 </div>
                 <div className="flex items-center space-x-2">
                   <div className="w-2 h-2 bg-slate-300 dark:bg-slate-700"></div>
-                  <span className="text-[10px] font-mono uppercase text-slate-500">Potential Mistakes</span>
+                  <span className="text-[10px] font-mono uppercase text-slate-500">Mentor Interventions</span>
                 </div>
               </div>
             </MechaContainer>
@@ -142,20 +242,29 @@ const Dashboard: React.FC = () => {
           <div className="h-[400px]">
             <MechaContainer title="Threat Recognition Accuracy">
               <div className="h-[280px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={data}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.2} />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'monospace' }} dy={10} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'monospace' }} />
-                    <Tooltip
-                      contentStyle={{ borderRadius: '0px', border: '1px solid #334155', backgroundColor: '#0f172a', color: '#fff', fontSize: '12px' }}
-                    />
-                    <Line type="step" dataKey="correct" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3, strokeWidth: 1, fill: '#0f172a', stroke: '#8b5cf6' }} activeDot={{ r: 6 }} />
-                  </LineChart>
-                </ResponsiveContainer>
+                {formattedChartData.some(d => d.correct > 0) ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={formattedChartData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.2} />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'monospace' }} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'monospace' }} />
+                      <Tooltip
+                        contentStyle={{ borderRadius: '0px', border: '1px solid #334155', backgroundColor: '#0f172a', color: '#fff', fontSize: '12px' }}
+                      />
+                      <Line type="monotone" dataKey="correct" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3, strokeWidth: 1, fill: '#0f172a', stroke: '#8b5cf6' }} activeDot={{ r: 6 }} name="Accuracy" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-slate-400">
+                    <div className="text-center">
+                      <p className="text-2xl mb-2">📈</p>
+                      <p className="text-sm">Your accuracy trend will appear here</p>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="mt-4 p-3 bg-purple-50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-900/30">
-                <p className="text-center text-xs text-purple-600 dark:text-purple-300 font-mono">"Your ability to spot urgency tactics has increased by 40% this month."</p>
+                <p className="text-center text-xs text-purple-600 dark:text-purple-300 font-mono">{getInsightMessage()}</p>
               </div>
             </MechaContainer>
           </div>
@@ -163,11 +272,12 @@ const Dashboard: React.FC = () => {
         </div>
 
         {/* Badges Section */}
-        <CyanBracketContainer title="Achievements Unlocked">
+        <CyanBracketContainer title="Achievements">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-8 text-center">
-            {BADGES.map((badge) => (
+            {/* Earned Badges */}
+            {earnedBadges.map((badge) => (
               <div key={badge.id} className="group cursor-help relative">
-                <div className="w-16 h-16 mx-auto bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-3xl mb-4 border border-slate-200 dark:border-slate-700 group-hover:border-blue-500 transition-all rounded-lg transform group-hover:scale-110">
+                <div className="w-16 h-16 mx-auto bg-gradient-to-br from-yellow-100 to-yellow-50 dark:from-yellow-900/20 dark:to-yellow-900/10 flex items-center justify-center text-3xl mb-4 border-2 border-yellow-400 dark:border-yellow-600 group-hover:border-blue-500 transition-all rounded-lg transform group-hover:scale-110 shadow-lg">
                   {badge.icon}
                 </div>
                 <h4 className="text-[10px] font-bold text-slate-800 dark:text-white uppercase tracking-widest">{badge.name}</h4>
@@ -178,13 +288,19 @@ const Dashboard: React.FC = () => {
                 </div>
               </div>
             ))}
-            {/* Locked Badges */}
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="opacity-30 grayscale">
-                <div className="w-16 h-16 mx-auto bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-3xl mb-4 border border-slate-200 dark:border-slate-700 rounded-lg border-dashed">
-                  🔒
+
+            {/* Locked Badges (show up to 6 total) */}
+            {lockedBadges.slice(0, Math.max(0, 6 - earnedBadges.length)).map((badge) => (
+              <div key={badge.id} className="opacity-50 group cursor-help relative">
+                <div className="w-16 h-16 mx-auto bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-3xl mb-4 border border-slate-200 dark:border-slate-700 rounded-lg border-dashed grayscale">
+                  {badge.icon}
                 </div>
-                <h4 className="text-[10px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-widest">Locked</h4>
+                <h4 className="text-[10px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-widest">{badge.name}</h4>
+
+                {/* Tooltip */}
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-32 bg-black text-white text-[9px] p-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
+                  🔒 {badge.description}
+                </div>
               </div>
             ))}
           </div>

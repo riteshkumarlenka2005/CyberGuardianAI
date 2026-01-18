@@ -36,6 +36,57 @@ export interface Scenario {
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
 }
 
+// Training Session - tracks a single training interaction
+export interface TrainingSession {
+  id: string;
+  date: string; // ISO date string (YYYY-MM-DD)
+  timestamp: number;
+  scenarioType: ScenarioType;
+  identity: UserIdentity;
+  messagesCount: number;
+  mentorInterventions: number;
+  tacticsEncountered: string[];
+  completed: boolean;
+  duration: number; // in seconds
+}
+
+// Daily aggregated stats for charts
+export interface DailyStats {
+  date: string;
+  sessionsCompleted: number;
+  correctDecisions: number;
+  mistakesCaught: number;
+}
+
+// User's overall progress
+export interface UserProgress {
+  totalSessions: number;
+  scenariosCompleted: Record<ScenarioType, number>;
+  totalMentorInterventions: number;
+  tacticsLearned: string[];
+  totalMessagesExchanged: number;
+  totalTimeSpent: number; // in seconds
+  dailyStats: DailyStats[];
+  badges: Badge[];
+  lastSessionDate: string | null;
+  streak: number; // consecutive days
+}
+
+// Badge/Achievement
+export interface Badge {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  earnedAt: number | null; // timestamp when earned, null if not earned
+  requirement: {
+    type: 'sessions' | 'scenario_type' | 'tactics' | 'streak';
+    value: number;
+    scenarioType?: ScenarioType;
+  };
+}
+
+// Legacy interface for backwards compatibility
 export interface UserStats {
   scenariosCompleted: number;
   patternsLearned: number;

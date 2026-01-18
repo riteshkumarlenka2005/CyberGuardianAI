@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { SCENARIOS } from '../../constants';
 import { ScenarioType, UserIdentity, Message, RiskAnalysis } from '../../types';
 import { GeminiService } from '../../services/geminiService';
+import { UserDataService } from '../../services/userDataService';
 import MessageBubble from '../../components/Chat/MessageBubble';
 
 const IDENTITY_OPTIONS = [
@@ -24,6 +25,11 @@ const Training: React.FC = () => {
   const [risk, setRisk] = useState<RiskAnalysis | null>(null);
   const [showMentor, setShowMentor] = useState(false);
 
+  // Session tracking state
+  const [sessionStartTime, setSessionStartTime] = useState<number>(0);
+  const [mentorInterventions, setMentorInterventions] = useState<number>(0);
+  const [tacticsEncountered, setTacticsEncountered] = useState<string[]>([]);
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -44,6 +50,11 @@ const Training: React.FC = () => {
     setMessages([]);
     setShowMentor(false);
     setRisk(null);
+
+    // Reset session tracking
+    setSessionStartTime(Date.now());
+    setMentorInterventions(0);
+    setTacticsEncountered([]);
 
     const firstMsg = await GeminiService.getScammerResponse(type, selectedIdentity!, []);
     const newMsg: Message = {
@@ -77,6 +88,12 @@ const Training: React.FC = () => {
       setRisk(analysis);
       setShowMentor(true);
       setIsLoading(false);
+
+      // Track mentor intervention and tactic
+      setMentorInterventions(prev => prev + 1);
+      if (analysis.manipulationTactic && !tacticsEncountered.includes(analysis.manipulationTactic)) {
+        setTacticsEncountered(prev => [...prev, analysis.manipulationTactic]);
+      }
       return;
     }
 
@@ -92,7 +109,41 @@ const Training: React.FC = () => {
     setIsLoading(false);
   };
 
+  // Save session data and return to scenario selection
+  const saveAndExitSession = () => {
+    if (selectedScenario && selectedIdentity && sessionStartTime > 0) {
+      const duration = Math.floor((Date.now() - sessionStartTime) / 1000);
+      const userMessages = messages.filter(m => m.role === 'user').length;
+
+      UserDataService.saveSession({
+        scenarioType: selectedScenario,
+        identity: selectedIdentity,
+        messagesCount: userMessages,
+        mentorInterventions: mentorInterventions,
+        tacticsEncountered: tacticsEncountered,
+        completed: true,
+        duration: duration
+      });
+    }
+    setStep('scenario');
+  };
+
   const restartScenario = () => {
+    // Save incomplete session before restarting
+    if (selectedScenario && selectedIdentity && sessionStartTime > 0 && messages.length > 1) {
+      const duration = Math.floor((Date.now() - sessionStartTime) / 1000);
+      const userMessages = messages.filter(m => m.role === 'user').length;
+
+      UserDataService.saveSession({
+        scenarioType: selectedScenario,
+        identity: selectedIdentity,
+        messagesCount: userMessages,
+        mentorInterventions: mentorInterventions,
+        tacticsEncountered: tacticsEncountered,
+        completed: false,
+        duration: duration
+      });
+    }
     if (selectedScenario) startScenario(selectedScenario);
   };
 
@@ -249,7 +300,7 @@ const Training: React.FC = () => {
               <p className="text-[10px] text-purple-500 font-mono">ENCRYPTION: AES-256 // MODE: SIMULATION</p>
             </div>
           </div>
-          <button onClick={() => setStep('scenario')} className="px-4 py-1.5 border border-red-200 dark:border-red-900/50 text-red-500 text-[10px] font-bold uppercase tracking-widest hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+          <button onClick={saveAndExitSession} className="px-4 py-1.5 border border-red-200 dark:border-red-900/50 text-red-500 text-[10px] font-bold uppercase tracking-widest hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
             Abort Mission
           </button>
         </div>
