@@ -1,0 +1,21 @@
+{
+  "name": "cyberguardian-ai",
+  "private": true,
+  "version": "1.0.0",
+  "description": "AI-powered cyber security training platform",
+  "workspaces": [
+    "client"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w client",
+    "build": "npm run build -w client",
+    "preview": "npm run preview -w client"
+  },
+  "keywords": [
+    "cybersecurity",
+    "training",
+    "AI",
+    "scam-prevention"
+  ],
+  "license": "MIT"
+}
