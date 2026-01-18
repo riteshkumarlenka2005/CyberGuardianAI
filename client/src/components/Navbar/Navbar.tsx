@@ -105,19 +105,17 @@ const Navbar: React.FC<NavbarProps> = ({
                 key={link.path}
                 to={link.path}
                 className={`relative text-xs uppercase tracking-[0.18em] font-bold py-2
-                  ${
-                    location.pathname === link.path
-                      ? 'text-black dark:text-white'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white'
+                  ${location.pathname === link.path
+                    ? 'text-black dark:text-white'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white'
                   }`}
               >
                 {link.name}
                 <span
                   className={`absolute left-0 -bottom-1 h-[2px] bg-black dark:bg-white transition-all duration-300
-                    ${
-                      location.pathname === link.path
-                        ? 'w-full'
-                        : 'w-0 group-hover:w-full'
+                    ${location.pathname === link.path
+                      ? 'w-full'
+                      : 'w-0 group-hover:w-full'
                     }`}
                 />
               </Link>
@@ -196,13 +194,13 @@ const Navbar: React.FC<NavbarProps> = ({
         {/* Mobile Header / Controls inside Drawer */}
         <div className="flex justify-between items-center mb-8 border-b border-slate-100 dark:border-slate-800 pb-4">
           <div className="flex items-center gap-4">
-             <span className="text-xs font-mono font-bold uppercase tracking-widest text-slate-400">Settings</span>
-             <button
-                onClick={toggleTheme}
-                className="w-10 h-10 flex items-center justify-center bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full text-slate-900 dark:text-white"
-              >
-                {isDarkMode ? '☀' : '☾'}
-              </button>
+            <span className="text-xs font-mono font-bold uppercase tracking-widest text-slate-400">Settings</span>
+            <button
+              onClick={toggleTheme}
+              className="w-10 h-10 flex items-center justify-center bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full text-slate-900 dark:text-white"
+            >
+              {isDarkMode ? '☀' : '☾'}
+            </button>
           </div>
           <button
             onClick={() => setIsMenuOpen(false)}
