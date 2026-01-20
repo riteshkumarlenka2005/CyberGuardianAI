@@ -1,12 +1,17 @@
-/**
- * API Service for CyberGuardian AI
- * Connects to the local FastAPI backend with Ollama + Mistral
- */
-
 import { ScenarioType, UserIdentity, AgeGroup, RiskAnalysis } from "../types";
+import authService from "./authService";
 
 // Backend API base URL
-const API_BASE_URL = "http://localhost:8000/api/v1";
+const API_BASE_URL = "http://127.0.0.1:8000/api/v1";
+
+// helper to get headers with auth
+const getHeaders = () => {
+  const token = authService.getToken();
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { "Authorization": `Bearer ${token}` } : {})
+  };
+};
 
 // Map frontend enums to backend values
 const PERSONA_MAP: Record<UserIdentity, string> = {
@@ -55,7 +60,7 @@ export class ApiService {
   ): Promise<{ message: string; sessionId: string }> {
     const response = await fetch(`${API_BASE_URL}/simulation/start`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(),
       body: JSON.stringify({
         persona: PERSONA_MAP[identity],
         age: ageGroup ? AGE_MAP[ageGroup] : 30,
@@ -64,6 +69,7 @@ export class ApiService {
     });
 
     if (!response.ok) {
+      if (response.status === 401) throw new Error("Authentication required");
       throw new Error("Failed to start simulation");
     }
 
@@ -98,7 +104,7 @@ export class ApiService {
 
     const response = await fetch(`${API_BASE_URL}/simulation/message`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(),
       body: JSON.stringify({
         session_id: sid,
         message: message,
@@ -106,6 +112,7 @@ export class ApiService {
     });
 
     if (!response.ok) {
+      if (response.status === 401) throw new Error("Authentication required");
       throw new Error("Failed to send message");
     }
 
@@ -133,11 +140,12 @@ export class ApiService {
 
     const response = await fetch(`${API_BASE_URL}/simulation/continue`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(),
       body: JSON.stringify({ session_id: sid }),
     });
 
     if (!response.ok) {
+      if (response.status === 401) throw new Error("Authentication required");
       throw new Error("Failed to continue simulation");
     }
 
@@ -156,11 +164,12 @@ export class ApiService {
 
     const response = await fetch(`${API_BASE_URL}/simulation/retry`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(),
       body: JSON.stringify({ session_id: sid }),
     });
 
     if (!response.ok) {
+      if (response.status === 401) throw new Error("Authentication required");
       throw new Error("Failed to retry simulation");
     }
 

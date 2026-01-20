@@ -3,7 +3,7 @@ Simulation API routes.
 Handles scam simulation sessions with the local Ollama + Mistral model.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 
 from ...schemas.simulation import (
     StartSimulationRequest,
@@ -15,7 +15,9 @@ from ...schemas.simulation import (
 )
 from ...services.session_store import session_store
 
-router = APIRouter()
+from ...security.jwt import require_auth
+
+router = APIRouter(dependencies=[Depends(require_auth)])
 
 
 # Mapping from frontend values to backend values

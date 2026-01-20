@@ -1,16 +1,18 @@
 /**
  * Authentication Service for CyberGuardian AI
- * Handles OAuth authentication with Google and GitHub
+ * Handles Local and OAuth authentication
  */
 
-const API_URL = 'http://localhost:8000';
+const API_URL = 'http://127.0.0.1:8000';
 
 export interface User {
-    id: string;
+    id: number;
     email: string;
-    name: string;
+    first_name: string;
+    last_name: string;
     picture: string;
-    provider: 'google' | 'github';
+    email_verified: boolean;
+    provider: 'local' | 'google' | 'github';
 }
 
 export interface AuthTokens {
@@ -21,6 +23,92 @@ export interface AuthTokens {
 class AuthService {
     private tokenKey = 'cyberguardian_token';
     private userKey = 'cyberguardian_user';
+
+    /**
+     * Local Email/Password Login
+     */
+    async login(email: string, password: string): Promise<AuthTokens> {
+        const response = await fetch(`${API_URL}/api/v1/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            let errorMessage = 'Authentication failed';
+
+            if (error.detail) {
+                if (typeof error.detail === 'string') {
+                    errorMessage = error.detail;
+                } else if (Array.isArray(error.detail)) {
+                    errorMessage = error.detail
+                        .map((d: any) => `${d.loc[d.loc.length - 1]}: ${d.msg}`)
+                        .join(', ');
+                }
+            }
+            throw new Error(errorMessage);
+        }
+
+        const data = await response.json();
+        this.setToken(data.access_token);
+        return { token: data.access_token, provider: 'local' };
+    }
+
+    /**
+     * Local Account Registration
+     */
+    async signup(userData: any): Promise<void> {
+        const response = await fetch(`${API_URL}/api/v1/auth/signup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(userData)
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            let errorMessage = 'Registration failed';
+
+            if (error.detail) {
+                if (typeof error.detail === 'string') {
+                    errorMessage = error.detail;
+                } else if (Array.isArray(error.detail)) {
+                    // FastAPI validation errors are often a list of objects
+                    errorMessage = error.detail
+                        .map((d: any) => `${d.loc[d.loc.length - 1]}: ${d.msg}`)
+                        .join(', ');
+                }
+            }
+            throw new Error(errorMessage);
+        }
+    }
+
+    /**
+     * Verify Email Token
+     */
+    async verifyEmail(email: string, token: string): Promise<void> {
+        const response = await fetch(`${API_URL}/api/v1/auth/verify-email-otp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, token })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            let errorMessage = 'Verification failed';
+
+            if (error.detail) {
+                if (typeof error.detail === 'string') {
+                    errorMessage = error.detail;
+                } else if (Array.isArray(error.detail)) {
+                    errorMessage = error.detail
+                        .map((d: any) => `${d.loc[d.loc.length - 1]}: ${d.msg}`)
+                        .join(', ');
+                }
+            }
+            throw new Error(errorMessage);
+        }
+    }
 
     /**
      * Initiate Google OAuth login
@@ -103,12 +191,12 @@ class AuthService {
         try {
             const payload = JSON.parse(atob(token.split('.')[1]));
             return {
-                id: payload.sub,
+                id: parseInt(payload.sub),
                 email: payload.email,
                 name: payload.name,
                 picture: payload.picture,
                 provider: payload.provider
-            };
+            } as any;
         } catch {
             return null;
         }

@@ -4,7 +4,9 @@ Main entry point for the API server.
 """
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 from .api.v1.simulation import router as simulation_router
 from .api.v1.auth import router as auth_router
@@ -15,18 +17,38 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware for frontend
+# Session middleware for OAuth state management
+# IMPORTANT: Change this secret in production!
+app.add_middleware(
+    SessionMiddleware,
+    secret_key="cyberguardian-session-secret-change-in-production-use-256-bit",
+    session_cookie="cyberguardian_session",
+    max_age=3600,  # 1 hour
+    same_site="lax",
+    https_only=False  # Set to True in production with HTTPS
+)
+
+# Logging middleware for debugging
+@app.middleware("http")
+async def log_requests(request, call_next):
+    origin = request.headers.get("origin")
+    print(f"Request: {request.method} {request.url} | Origin: {origin}")
+    try:
+        response = await call_next(request)
+        print(f"Response: {response.status_code}")
+        return response
+    except Exception as e:
+        print(f"ERROR in middleware: {str(e)}")
+        return JSONResponse(status_code=500, content={"detail": str(e)}) # Ensure CORS headers are still added in error case
+
+# CORS middleware - specific settings for local dev
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:5173",
-        "http://localhost:5174",
         "http://127.0.0.1:3000",
+        "http://localhost:3001",
         "http://127.0.0.1:3001",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:5174",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -46,4 +68,3 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
-

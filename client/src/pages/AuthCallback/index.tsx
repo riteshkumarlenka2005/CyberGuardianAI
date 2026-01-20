@@ -7,7 +7,11 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import authService from '../../services/authService';
 
-const AuthCallback: React.FC = () => {
+interface AuthCallbackProps {
+    onLogin: () => void;
+}
+
+const AuthCallback: React.FC<AuthCallbackProps> = ({ onLogin }) => {
     const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
     const [message, setMessage] = useState('Processing authentication...');
     const navigate = useNavigate();
@@ -32,6 +36,9 @@ const AuthCallback: React.FC = () => {
                     setStatus('success');
                     setMessage(`Successfully authenticated with ${provider}!`);
 
+                    // Call onLogin to update app state
+                    onLogin();
+
                     // Redirect to training page after short delay
                     setTimeout(() => {
                         navigate('/training');
@@ -49,7 +56,7 @@ const AuthCallback: React.FC = () => {
         };
 
         handleCallback();
-    }, [searchParams, navigate]);
+    }, [searchParams, navigate, onLogin]);
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-white dark:bg-[#0B0F19]">
@@ -69,7 +76,7 @@ const AuthCallback: React.FC = () => {
                             </svg>
                         </div>
                         <p className="text-green-600 dark:text-green-400 font-semibold">{message}</p>
-                        <p className="text-slate-500 dark:text-slate-400 text-sm mt-2">Redirecting...</p>
+                        <p className="text-slate-500 dark:text-slate-400 text-sm mt-2">Redirecting to training...</p>
                     </>
                 )}
 

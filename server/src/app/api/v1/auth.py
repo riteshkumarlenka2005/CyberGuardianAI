@@ -1,47 +1,90 @@
-"""
-OAuth Authentication API Routes for CyberGuardian AI.
-Handles Google and GitHub OAuth flows.
-"""
 
-from fastapi import APIRouter, HTTPException, status, Query
+from fastapi import APIRouter, HTTPException, status, Query, Request, Depends
 from fastapi.responses import RedirectResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 import httpx
 import secrets
 from urllib.parse import urlencode
 from typing import Optional
 
-from ..security.config import (
+from ...security.config import (
     settings,
     GOOGLE_AUTH_URL, GOOGLE_TOKEN_URL, GOOGLE_USERINFO_URL,
     GITHUB_AUTH_URL, GITHUB_TOKEN_URL, GITHUB_USERINFO_URL, GITHUB_EMAILS_URL
 )
-from ..security.jwt import create_access_token
-
+from ...schemas.auth import UserSignup, UserLogin, Token, UserResponse, EmailVerification
+from ...services.auth_service import AuthService
+from sqlalchemy.future import select
+from ...models.user import User
+from ...database import get_db
+from ...security.jwt import decode_token
 
 router = APIRouter()
 
-# In-memory state storage (use Redis in production)
-_oauth_states = {}
+# ================================================
+# EMAIL / PASSWORD AUTH
+# ================================================
 
+@router.post("/signup", response_model=UserResponse)
+async def signup(user_data: UserSignup, db: AsyncSession = Depends(get_db)):
+    """Registers a new user and triggers email verification."""
+    try:
+        user, _ = await AuthService.signup(db, user_data)
+        return user
+    except Exception as e:
+        print(f"SIGNUP ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/login", response_model=Token)
+async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
+    """Log in with email and password."""
+    token = await AuthService.login(db, credentials)
+    return {"access_token": token, "token_type": "bearer", "provider": "local"}
+
+@router.get("/verify-email")
+async def verify_email(
+    email: str = Query(...),
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """Verifies user email via link/token."""
+    success = await AuthService.verify_email(db, email, token)
+    if not success:
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=invalid_verification_token")
+    
+    return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?message=email_verified")
+
+@router.post("/verify-email-otp")
+async def verify_email_otp(data: EmailVerification, db: AsyncSession = Depends(get_db)):
+    """Verifies user email via OTP/input."""
+    success = await AuthService.verify_email(db, data.email, data.token)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token"
+        )
+    return {"message": "Email verified successfully"}
 
 # ================================================
 # GOOGLE OAUTH
 # ================================================
 
 @router.get("/google/login")
-async def google_login():
-    """
-    Initiates Google OAuth flow.
-    Redirects user to Google's auth page.
-    """
+async def google_login(request: Request):
+    """Initiates Google OAuth flow."""
     if not settings.GOOGLE_CLIENT_ID:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."
+            detail="Google OAuth is not configured."
         )
     
     state = secrets.token_urlsafe(32)
-    _oauth_states[state] = "google"
+    request.session["oauth_state"] = state
+    request.session["oauth_provider"] = "google"
     
     params = {
         "client_id": settings.GOOGLE_CLIENT_ID,
@@ -53,39 +96,31 @@ async def google_login():
         "prompt": "consent"
     }
     
-    auth_url = f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
-    return RedirectResponse(url=auth_url)
-
+    return RedirectResponse(url=f"{GOOGLE_AUTH_URL}?{urlencode(params)}")
 
 @router.get("/google/callback")
 async def google_callback(
+    request: Request,
     code: Optional[str] = Query(None),
     state: Optional[str] = Query(None),
-    error: Optional[str] = Query(None)
+    error: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db)
 ):
-    """
-    Handles Google OAuth callback.
-    Exchanges code for token and creates JWT.
-    """
+    """Handles Google OAuth callback and links to database."""
     if error:
-        return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/login?error={error}"
-        )
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error={error}")
     
     if not code or not state:
-        return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/login?error=missing_params"
-        )
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=missing_params")
     
-    # Verify state
-    if state not in _oauth_states or _oauth_states[state] != "google":
-        return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/login?error=invalid_state"
-        )
-    del _oauth_states[state]
+    if request.session.get("oauth_state") != state or request.session.get("oauth_provider") != "google":
+        request.session.clear()
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=invalid_state")
+    
+    request.session.pop("oauth_state", None)
+    request.session.pop("oauth_provider", None)
     
     try:
-        # Exchange code for token
         async with httpx.AsyncClient() as client:
             token_response = await client.post(
                 GOOGLE_TOKEN_URL,
@@ -98,59 +133,40 @@ async def google_callback(
                 }
             )
             token_data = token_response.json()
-            
             if "error" in token_data:
-                return RedirectResponse(
-                    url=f"{settings.FRONTEND_URL}/login?error={token_data['error']}"
-                )
+                return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error={token_data['error']}")
             
-            access_token = token_data["access_token"]
-            
-            # Get user info
             userinfo_response = await client.get(
                 GOOGLE_USERINFO_URL,
-                headers={"Authorization": f"Bearer {access_token}"}
+                headers={"Authorization": f"Bearer {token_data['access_token']}"}
             )
             user_data = userinfo_response.json()
-        
-        # Create JWT
-        jwt_token = create_access_token({
-            "sub": user_data["id"],
-            "email": user_data["email"],
-            "name": user_data.get("name", ""),
-            "picture": user_data.get("picture", ""),
-            "provider": "google"
-        })
-        
-        # Redirect to frontend with token
+            user_data["provider"] = "google"
+            
+            jwt_token = await AuthService.handle_oauth_user(db, user_data)
+            
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/auth/callback?token={jwt_token}&provider=google"
         )
-        
-    except Exception as e:
-        return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/login?error=oauth_failed"
-        )
-
+    except Exception:
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=oauth_failed")
 
 # ================================================
 # GITHUB OAUTH
 # ================================================
 
 @router.get("/github/login")
-async def github_login():
-    """
-    Initiates GitHub OAuth flow.
-    Redirects user to GitHub's auth page.
-    """
+async def github_login(request: Request):
+    """Initiates GitHub OAuth flow."""
     if not settings.GITHUB_CLIENT_ID:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="GitHub OAuth is not configured. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET."
+            detail="GitHub OAuth is not configured."
         )
     
     state = secrets.token_urlsafe(32)
-    _oauth_states[state] = "github"
+    request.session["oauth_state"] = state
+    request.session["oauth_provider"] = "github"
     
     params = {
         "client_id": settings.GITHUB_CLIENT_ID,
@@ -159,40 +175,32 @@ async def github_login():
         "state": state
     }
     
-    auth_url = f"{GITHUB_AUTH_URL}?{urlencode(params)}"
-    return RedirectResponse(url=auth_url)
-
+    return RedirectResponse(url=f"{GITHUB_AUTH_URL}?{urlencode(params)}")
 
 @router.get("/github/callback")
 async def github_callback(
+    request: Request,
     code: Optional[str] = Query(None),
     state: Optional[str] = Query(None),
-    error: Optional[str] = Query(None)
+    error: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db)
 ):
-    """
-    Handles GitHub OAuth callback.
-    Exchanges code for token and creates JWT.
-    """
+    """Handles GitHub OAuth callback and links to database."""
     if error:
-        return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/login?error={error}"
-        )
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error={error}")
     
     if not code or not state:
-        return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/login?error=missing_params"
-        )
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=missing_params")
     
-    # Verify state
-    if state not in _oauth_states or _oauth_states[state] != "github":
-        return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/login?error=invalid_state"
-        )
-    del _oauth_states[state]
+    if request.session.get("oauth_state") != state or request.session.get("oauth_provider") != "github":
+        request.session.clear()
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=invalid_state")
+    
+    request.session.pop("oauth_state", None)
+    request.session.pop("oauth_provider", None)
     
     try:
         async with httpx.AsyncClient() as client:
-            # Exchange code for token
             token_response = await client.post(
                 GITHUB_TOKEN_URL,
                 data={
@@ -204,100 +212,56 @@ async def github_callback(
                 headers={"Accept": "application/json"}
             )
             token_data = token_response.json()
-            
             if "error" in token_data:
-                return RedirectResponse(
-                    url=f"{settings.FRONTEND_URL}/login?error={token_data['error']}"
-                )
+                return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error={token_data['error']}")
             
-            access_token = token_data["access_token"]
-            
-            # Get user info
-            userinfo_response = await client.get(
+            user_response = await client.get(
                 GITHUB_USERINFO_URL,
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/json"
-                }
+                headers={"Authorization": f"Bearer {token_data['access_token']}", "Accept": "application/json"}
             )
-            user_data = userinfo_response.json()
+            github_user = user_response.json()
             
-            # Get user email (might be private)
-            email = user_data.get("email")
-            if not email:
-                emails_response = await client.get(
-                    GITHUB_EMAILS_URL,
-                    headers={
-                        "Authorization": f"Bearer {access_token}",
-                        "Accept": "application/json"
-                    }
-                )
-                emails = emails_response.json()
-                primary_email = next(
-                    (e for e in emails if e.get("primary")),
-                    emails[0] if emails else None
-                )
-                email = primary_email["email"] if primary_email else ""
-        
-        # Create JWT
-        jwt_token = create_access_token({
-            "sub": str(user_data["id"]),
-            "email": email,
-            "name": user_data.get("name") or user_data.get("login", ""),
-            "picture": user_data.get("avatar_url", ""),
-            "provider": "github"
-        })
-        
-        # Redirect to frontend with token
+            email_response = await client.get(
+                GITHUB_EMAILS_URL,
+                headers={"Authorization": f"Bearer {token_data['access_token']}", "Accept": "application/json"}
+            )
+            emails = email_response.json()
+            primary_email = next((e for e in emails if e.get("primary")), emails[0])["email"]
+            
+            user_data = {
+                "sub": str(github_user["id"]),
+                "email": primary_email,
+                "name": github_user.get("name") or github_user.get("login"),
+                "picture": github_user.get("avatar_url"),
+                "provider": "github"
+            }
+            
+            jwt_token = await AuthService.handle_oauth_user(db, user_data)
+            
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/auth/callback?token={jwt_token}&provider=github"
         )
-        
-    except Exception as e:
-        return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/login?error=oauth_failed"
-        )
-
+    except Exception:
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=oauth_failed")
 
 # ================================================
-# USER INFO & SESSION
+# SESSION
 # ================================================
 
-@router.get("/me")
-async def get_current_user_info(
-    authorization: Optional[str] = Query(None, alias="token")
-):
-    """
-    Get current user info from token.
-    Can be called from frontend to verify token.
-    """
-    from ..security.jwt import decode_token
-    
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No token provided"
-        )
-    
-    # Remove 'Bearer ' prefix if present
-    token = authorization.replace("Bearer ", "") if authorization.startswith("Bearer ") else authorization
-    
+@router.get("/me", response_model=UserResponse)
+async def get_me(token: str = Query(...), db: AsyncSession = Depends(get_db)):
+    """Verifies and returns the current user profile."""
     payload = decode_token(token)
+    user_id = int(payload.get("sub"))
     
-    return {
-        "id": payload.get("sub"),
-        "email": payload.get("email"),
-        "name": payload.get("name"),
-        "picture": payload.get("picture"),
-        "provider": payload.get("provider")
-    }
-
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return user
 
 @router.post("/logout")
 async def logout():
-    """
-    Logout endpoint.
-    For JWT, logout is handled client-side by deleting the token.
-    This endpoint exists for consistency.
-    """
-    return {"message": "Logged out successfully"}
+    return {"message": "Logged out"}
