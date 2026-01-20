@@ -1,14 +1,34 @@
+"""
+Production-level simulation controller for CyberGuardian AI.
+Orchestrates the scam simulation with full persona/scenario context.
+"""
+
 from ai.session.session_state import SimulationSession, SimulationState
 from ai.risk_detection.risk_detection import detect_risk
-from ai.mentor_engine.mentor_engine import run_mentor
-from ai.prompts.prompt_builder import build_simulator_prompt
+from ai.mentor_engine.mentor_engine import run_mentor, get_quick_tip
+from ai.prompts.prompt_builder import build_simulator_prompt, build_initial_message_prompt
 from ai.llm.ollama_client import call_ollama
 
 
 class SimulationController:
+    """
+    Controls the scam simulation flow with deterministic state management.
+    
+    Key guarantees:
+    - HIGH risk ALWAYS triggers mentor, NEVER calls scammer LLM
+    - Persona/scenario context flows to all components
+    - Conversation history is limited to prevent hallucination
+    """
+    
     def __init__(self, persona: str, age: int, scenario: str):
         self.session = SimulationSession(persona, age, scenario)
         self.sim_prompt = build_simulator_prompt(persona, age, scenario)
+        self.initial_prompt = build_initial_message_prompt(persona, age, scenario)
+        
+        # Store context for mentor
+        self.persona = persona
+        self.age = age
+        self.scenario = scenario
 
     def _get_limited_history(self, max_exchanges: int = 5) -> str:
         """Return only the last N exchanges from history to prevent LLM hallucination."""
@@ -26,9 +46,42 @@ class SimulationController:
                 return line.replace("Scammer:", "").strip()
         return ""
 
+    def start_simulation(self) -> dict:
+        """
+        Generate the first scammer message to start the simulation.
+        Called when user enters the simulation.
+        """
+        if self.session.state != SimulationState.SIMULATING:
+            return {
+                "mode": "ENDED",
+                "message": "Simulation has ended. Please start a new one."
+            }
+        
+        # Generate initial scammer message
+        initial_message = call_ollama(self.initial_prompt)
+        
+        # Add to history
+        self.session.add_message("Scammer", initial_message)
+        
+        return {
+            "mode": "SIMULATOR",
+            "risk": "LOW",
+            "message": initial_message,
+            "persona": self.persona,
+            "scenario": self.scenario
+        }
+
     def user_message(self, message: str) -> dict:
         """
-        Handles a user message and returns what the frontend should display.
+        Process user message and return appropriate response.
+        
+        CRITICAL CONTROL FLOW:
+        1. Check if simulation ended -> return ended state
+        2. Add user message to history
+        3. Check if mentor active -> block new messages
+        4. Detect risk level
+        5. If HIGH risk -> trigger mentor, DO NOT call scammer LLM
+        6. If LOW/MEDIUM -> call scammer LLM
         """
 
         # If simulation ended, nothing to do
@@ -45,23 +98,34 @@ class SimulationController:
         if self.session.state == SimulationState.MENTOR:
             return {
                 "mode": "MENTOR",
-                "message": "Simulation paused. Use Continue or Retry."
+                "message": "Simulation paused. Use Continue or Retry.",
+                "quick_tip": get_quick_tip(self.persona, self.scenario)
             }
 
-        # Risk detection
-        risk = detect_risk(message)
+        # === CRITICAL: RISK DETECTION BEFORE LLM CALL ===
+        risk = detect_risk(message, self.scenario)
 
-        # HIGH RISK → Mentor
+        # HIGH RISK → Mentor takes over, NO scammer LLM call
         if risk == "HIGH":
             self.session.pause_for_mentor()
-            mentor_text = run_mentor(self._get_last_scammer_message(), message)
+            
+            # Get persona-aware mentor explanation
+            mentor_text = run_mentor(
+                last_scammer_message=self._get_last_scammer_message(),
+                user_risky_reply=message,
+                persona=self.persona,
+                age=self.age,
+                scenario=self.scenario
+            )
+            
             return {
                 "mode": "MENTOR",
                 "risk": risk,
-                "message": mentor_text
+                "message": mentor_text,
+                "quick_tip": get_quick_tip(self.persona, self.scenario)
             }
 
-        # LOW / MEDIUM → Continue simulation
+        # LOW / MEDIUM → Continue simulation with scammer LLM
         full_prompt = f"""
 {self.sim_prompt}
 
@@ -85,12 +149,14 @@ Scammer:
     def continue_simulation(self) -> dict:
         """
         Called when user clicks Continue after mentor explanation.
+        Resumes the simulation from where it paused.
         """
         if self.session.state == SimulationState.MENTOR:
             self.session.resume_simulation()
             return {
                 "mode": "SIMULATOR",
-                "message": "Simulation resumed. Respond when ready."
+                "message": "Simulation resumed. What would you like to respond?",
+                "last_scammer_message": self._get_last_scammer_message()
             }
 
         return {
@@ -101,9 +167,20 @@ Scammer:
     def retry_simulation(self) -> dict:
         """
         Called when user clicks Retry.
+        Ends the current simulation.
         """
         self.session.reset()
         return {
             "mode": "ENDED",
             "message": "Simulation reset. Please choose a new scenario."
+        }
+    
+    def get_session_info(self) -> dict:
+        """Get current session information."""
+        return {
+            "persona": self.persona,
+            "age": self.age,
+            "scenario": self.scenario,
+            "state": self.session.state.value,
+            "message_count": len([l for l in self.session.history.split('\n') if l.strip()])
         }
