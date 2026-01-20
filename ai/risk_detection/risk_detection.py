@@ -1,221 +1,305 @@
 """
-Production-level risk detection for CyberGuardian AI.
-Detects risky user responses with scenario-aware patterns.
+Universal Risk Detection Engine for CyberGuardian AI.
+Detects ANY risky user response using pattern matching and semantic analysis.
+
+CRITICAL: Backend code enforces mentoring, NOT the LLM.
 """
 
 import re
-from typing import Optional
+from typing import Optional, Tuple
 
 
-# Scenario-specific high-risk keywords
-SCENARIO_RISK_PATTERNS = {
-    "bank": [
-        "otp", "cvv", "pin", "atm pin", "card number", "account number",
-        "net banking", "password", "upi pin", "transaction password",
-        "debit card", "credit card", "ifsc", "branch code"
-    ],
-    "job_offer": [
-        "resume", "cv", "aadhaar", "pan card", "id proof", "address proof",
-        "registration fee", "processing fee", "bank details", "salary account",
-        "joining fee", "training fee", "security deposit"
-    ],
-    "government": [
-        "aadhaar", "pan", "fine", "penalty", "payment", "transfer",
-        "settlement amount", "case number", "fir", "challan"
-    ],
-    "relative_emergency": [
-        "transfer", "send money", "upi", "bank account", "gpay", "paytm",
-        "phonepe", "immediate", "urgent", "right now"
-    ],
-    "lottery_offer": [
-        "processing fee", "claim fee", "tax payment", "bank details",
-        "account number", "transfer charges", "verification fee"
+# ================================================
+# UNIVERSAL RISK PATTERNS (NOT scenario-specific)
+# ================================================
+
+# Intent patterns using regex for flexible matching
+COMPLIANCE_INTENT_PATTERNS = [
+    # Agreement patterns
+    r'\b(ok|okay|yes|sure|fine|alright|agreed|ya|yea|yeah)\b.*\b(i will|i am|i\'ll|let me|sending|give|transfer|pay|share)',
+    r'\b(i will|i am|i\'ll|let me)\b.*\b(send|give|transfer|pay|share|provide|do it)',
+    r'\b(sending|giving|transferring|paying|sharing)\b.*\b(now|it|you|this|that)',
+    r'\bhere\s*(you\s*go|it\s*is|is\s*my|are\s*my)',
+    r'\btake\s*(my|this|it)',
+    r'\b(done|sent|shared|transferred|paid|given)\b',
+    
+    # Confirmation patterns
+    r'\b(yes|ok|okay|sure)\s*(i\s*)?(confirm|agree|accept|understand)',
+    r'\bi\s*(confirm|agree|accept)',
+    r'\b(confirmed|agreed|accepted)\b',
+]
+
+# Data sharing patterns
+DATA_SHARING_PATTERNS = [
+    # Personal identifiers - flexible matching
+    r'\b(my|the)\s*(name|full\s*name)\s*(is|:)',
+    r'\b(dob|date\s*of\s*birth|birthday)\b',
+    r'\b(aadhaar|aadhar|adhaar)\b',
+    r'\b(pan\s*(card|number)?|pancard)\b',
+    r'\b(passport|voter\s*id|driving\s*licen[cs]e)\b',
+    r'\bssn|social\s*security\b',
+    
+    # Financial data - flexible matching
+    r'\b(otp|one\s*time\s*password)\b',
+    r'\b(cvv|cvc|security\s*code)\b',
+    r'\b(pin|atm\s*pin|upi\s*pin)\b',
+    r'\b(account\s*(number|no|#)?|a/c\s*(no|number)?)\b',
+    r'\b(card\s*(number|no|#)?|credit\s*card|debit\s*card)\b',
+    r'\b(ifsc|routing\s*number|swift)\b',
+    r'\b(password|pwd|passcode)\b',
+    r'\bexpiry|valid\s*(till|thru|through)\b',
+    
+    # Contact/address
+    r'\b(my|the)\s*(address|phone|mobile|email)\s*(is|:)',
+    r'\bi\s*live\s*(at|in)\b',
+]
+
+# Numeric patterns indicating sensitive data
+SENSITIVE_NUMERIC_PATTERNS = [
+    r'\b\d{8,}\b',  # Account numbers (8+ digits)
+    r'\b\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\b',  # Card numbers
+    r'\b\d{3,4}\s*\d{4}\s*\d{4}\b',  # Aadhaar-like
+    r'\b\d{4,6}\b(?=.*\b(otp|code|pin)\b)',  # OTP/PIN context
+    r'\b[A-Z]{5}\d{4}[A-Z]\b',  # PAN format
+]
+
+# Money patterns
+MONEY_PATTERNS = [
+    r'\b\d{1,3}(?:,\d{2,3})+\b',  # Indian format: 45,000 or 5,00,000
+    r'(?:rs\.?|₹|\$|inr|usd)\s*\d+',  # Currency symbols
+    r'\b\d+\s*(?:rupees?|dollars?|lakhs?|lac|crores?|thousand|k|hundred)\b',
+    r'\b\d{4,}\b',  # Large numbers (4+ digits)
+]
+
+# Bank and payment identifiers
+FINANCIAL_IDENTIFIERS = [
+    # Indian banks
+    r'\b(sbi|hdfc|icici|axis|kotak|pnb|bob|idbi|canara|union\s*bank)\b',
+    r'\b(state\s*bank|punjab\s*national|bank\s*of\s*(baroda|india))\b',
+    r'\b(yes\s*bank|indusind|federal\s*bank|rbl|bandhan)\b',
+    
+    # International banks
+    r'\b(chase|wells\s*fargo|citi|citibank|hsbc|barclays)\b',
+    r'\bbank\s*of\s*america\b',
+    
+    # Payment apps
+    r'\b(gpay|google\s*pay|paytm|phonepe|bhim|upi)\b',
+    r'\b(paypal|venmo|cash\s*app)\b',
+    
+    # Generic
+    r'\b(my|from\s*my|to\s*my)\s*(bank|account|savings)\b',
+]
+
+# Hesitation patterns (MEDIUM risk)
+HESITATION_PATTERNS = [
+    r'\b(not\s*sure|unsure|confused|don\'t\s*understand)\b',
+    r'\b(is\s*this|are\s*you)\s*(safe|real|legit|genuine|official|true)\b',
+    r'\b(can\s*you|could\s*you)\s*(explain|verify|prove|confirm)\b',
+    r'\b(why|how)\s*(do\s*you|should\s*i)\s*(need|trust|believe)\b',
+    r'\b(sounds?|seems?|looks?)\s*(suspicious|fishy|fake|odd|strange|weird)\b',
+    r'\b(wait|hold\s*on|let\s*me\s*think|give\s*me\s*time)\b',
+    r'\b(bit|little|somewhat)\s*(worried|concerned|hesitant)\b',
+    r'\bhow\s*(do|can)\s*i\s*(know|verify|check|confirm)\b',
+]
+
+
+def _check_patterns(text: str, patterns: list) -> bool:
+    """Check if any pattern matches the text."""
+    for pattern in patterns:
+        if re.search(pattern, text, re.IGNORECASE):
+            return True
+    return False
+
+
+def _detect_implicit_compliance(text: str) -> bool:
+    """
+    Detect implicit compliance even without explicit keywords.
+    Use semantic patterns to catch phrases like:
+    - "ok" followed by any positive action
+    - Short affirmative responses in risky context
+    """
+    text_lower = text.lower().strip()
+    
+    # Very short affirmative responses (1-3 words) that indicate compliance
+    short_affirmatives = [
+        r'^(ok|okay|yes|sure|fine|alright|done|sent|ya|yea|yeah)\.?$',
+        r'^(ok|okay|yes|sure)\s+(sir|ma\'?am|boss|bro|ji)\.?$',
+        r'^(i\s*will|i\'ll|let\s*me|sending|ok\s*wait)\.?$',
     ]
-}
+    
+    for pattern in short_affirmatives:
+        if re.match(pattern, text_lower):
+            return True
+    
+    return False
 
 
 def detect_risk(user_message: str, scenario: Optional[str] = None) -> str:
     """
-    Analyze the user's last message and return a risk level: LOW, MEDIUM, or HIGH.
+    Universal risk detection engine.
     
-    Args:
-        user_message: The user's message to analyze
-        scenario: Optional scenario key for scenario-specific detection
+    Returns: "LOW", "MEDIUM", or "HIGH"
     
-    Returns:
-        Risk level string: "LOW", "MEDIUM", or "HIGH"
+    CRITICAL: This function MUST be called BEFORE any LLM call.
+    If this returns "HIGH", the LLM must NOT be called.
     """
-
-    text = user_message.lower()
-    original_text = user_message  # Keep original for numeric pattern matching
-
-    # ========================================
-    # HIGH RISK: Explicit data sharing
-    # ========================================
-    explicit_data_keywords = [
-        # Personal identifiers
-        "my name is", "date of birth", "dob", "here are my details",
-        "aadhaar", "aadhar", "pan card", "pan number", "passport",
-        "voter id", "driving license",
-        
-        # Financial data
-        "last 4 digits", "social security", "ssn", "otp", "code is",
-        "my password", "my pin", "bank account", "credit card",
-        "mother's maiden", "security question", "account number",
-        "ifsc", "routing number", "swift code", "cvv", "expiry date",
-        "card number", "upi pin", "net banking",
-        
-        # Contact/address
-        "my address is", "i live at", "my phone number", "my email is"
-    ]
-
-    for keyword in explicit_data_keywords:
-        if keyword in text:
-            return "HIGH"
-
-    # ========================================
-    # HIGH RISK: Intent to comply/transfer
-    # ========================================
-    compliance_intent_keywords = [
-        # Sending intent
-        "ok i am sending", "okay i am sending", "ok i will send",
-        "ok i will give", "okay i will give", "i will give you",
-        "i will give", "i will send", "i will transfer", "i am sending",
-        "i am transferring", "sending now", "sending it", "transferring now",
-        "let me send", "let me give", "let me transfer",
-        
-        # Agreement/confirmation
-        "yes i will", "yes i am", "i will do it", "okay i will", "ok i will",
-        "sure i will", "i'll send", "i'll give", "i'll transfer", "i'll do it",
-        "yes i confirm", "i confirm", "ok done", "okay done", "i agree",
-        
-        # Completion claims
-        "i have sent", "i have transferred", "just sent", "already sent",
-        "shared it", "here you go", "giving you", "i am giving",
-        "take my", "here is my", "done", "sent",
-        
-        # Payment intent
-        "i will pay", "i am paying", "paying now", "let me pay"
-    ]
-
-    for keyword in compliance_intent_keywords:
-        if keyword in text:
-            return "HIGH"
-
-    # ========================================
-    # HIGH RISK: Bank names (user revealing their bank)
-    # ========================================
-    bank_names = [
-        # Indian banks
-        "sbi", "state bank", "hdfc", "icici", "axis", "kotak", "pnb",
-        "punjab national", "bob", "bank of baroda", "canara", "union bank",
-        "idbi", "yes bank", "indusind", "federal bank", "rbl", "bandhan",
-        "indian bank", "uco bank", "central bank", "bank of india",
-        
-        # International banks
-        "chase", "wells fargo", "bank of america", "citi", "citibank",
-        "hsbc", "barclays", "lloyds", "natwest", "santander",
-        
-        # Payment apps (when mentioned as source)
-        "my gpay", "my paytm", "my phonepe", "from gpay", "from paytm",
-        
-        # Generic
-        "my bank", "from my account", "to my account", "my savings"
-    ]
-
-    for bank in bank_names:
-        if bank in text:
-            return "HIGH"
-
-    # ========================================
-    # HIGH RISK: Account number pattern (8+ consecutive digits)
-    # ========================================
-    account_pattern = r'\b\d{8,}\b'
-    if re.search(account_pattern, original_text):
+    
+    text = user_message.strip()
+    text_lower = text.lower()
+    
+    # Empty or very short non-risky messages
+    if len(text) < 2:
+        return "LOW"
+    
+    # ================================================
+    # HIGH RISK CHECKS (in order of priority)
+    # ================================================
+    
+    # 1. Explicit data sharing patterns
+    if _check_patterns(text_lower, DATA_SHARING_PATTERNS):
         return "HIGH"
-
-    # ========================================
-    # HIGH RISK: Money amount patterns
-    # ========================================
-    money_patterns = [
-        r'\b\d{1,3}(?:,\d{2,3})+\b',  # 45,000 or 5,00,000
-        r'\b(?:rs\.?|₹|\$|inr|usd)\s*\d+',  # Rs.5000, $500, ₹10000
-        r'\b\d+\s*(?:rupees?|dollars?|lakhs?|crores?|thousand|hundred)\b',  # 5000 rupees
-        r'\b\d{4,}\b',  # Plain large numbers (4+ digits): 5000, 45000
-    ]
-
-    for pattern in money_patterns:
-        if re.search(pattern, text, re.IGNORECASE):
-            return "HIGH"
-
-    # ========================================
-    # HIGH RISK: Scenario-specific keywords
-    # ========================================
-    if scenario and scenario in SCENARIO_RISK_PATTERNS:
-        scenario_keywords = SCENARIO_RISK_PATTERNS[scenario]
-        for keyword in scenario_keywords:
-            if keyword in text:
-                return "HIGH"
-
-    # ========================================
-    # MEDIUM RISK: User is hesitating or questioning
-    # ========================================
-    medium_risk_keywords = [
-        "not sure", "can you explain", "why do you need",
-        "is this safe", "are you sure", "i don't understand",
-        "can you tell me more", "how do i know", "is this real",
-        "is this legit", "sounds suspicious", "is this genuine",
-        "should i trust", "seems fishy", "bit worried", "not comfortable",
-        "can i verify", "how to verify", "is this official",
-        "wait", "hold on", "let me think", "i need time"
-    ]
-
-    for keyword in medium_risk_keywords:
-        if keyword in text:
-            return "MEDIUM"
-
-    # ========================================
-    # LOW RISK: Normal conversation
-    # ========================================
+    
+    # 2. Sensitive numeric data
+    if _check_patterns(text, SENSITIVE_NUMERIC_PATTERNS):
+        return "HIGH"
+    
+    # 3. Money amounts
+    if _check_patterns(text_lower, MONEY_PATTERNS):
+        return "HIGH"
+    
+    # 4. Financial identifiers (bank names, payment apps)
+    if _check_patterns(text_lower, FINANCIAL_IDENTIFIERS):
+        return "HIGH"
+    
+    # 5. Compliance intent patterns
+    if _check_patterns(text_lower, COMPLIANCE_INTENT_PATTERNS):
+        return "HIGH"
+    
+    # 6. Implicit compliance (short affirmatives)
+    if _detect_implicit_compliance(text):
+        return "HIGH"
+    
+    # 7. Contains what looks like actual sensitive data
+    # Raw numbers that could be account/card/OTP
+    if re.search(r'\b\d{6,}\b', text):  # 6+ digit numbers
+        return "HIGH"
+    
+    # ================================================
+    # MEDIUM RISK CHECKS
+    # ================================================
+    
+    if _check_patterns(text_lower, HESITATION_PATTERNS):
+        return "MEDIUM"
+    
+    # ================================================
+    # LOW RISK (default)
+    # ================================================
+    
     return "LOW"
 
 
+def get_risk_explanation(user_message: str, risk_level: str) -> Tuple[str, list]:
+    """
+    Get explanation of why message was flagged.
+    Returns (category, matched_patterns)
+    """
+    text = user_message.lower()
+    
+    checks = [
+        ("Data Sharing", DATA_SHARING_PATTERNS),
+        ("Compliance Intent", COMPLIANCE_INTENT_PATTERNS),
+        ("Financial Info", FINANCIAL_IDENTIFIERS),
+        ("Money Amount", MONEY_PATTERNS),
+        ("Sensitive Number", SENSITIVE_NUMERIC_PATTERNS),
+        ("Hesitation", HESITATION_PATTERNS),
+    ]
+    
+    for category, patterns in checks:
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return category, [match.group()]
+    
+    if _detect_implicit_compliance(user_message):
+        return "Implicit Compliance", [user_message.strip()]
+    
+    return "General", []
+
+
+# ================================================
+# TEST SUITE
+# ================================================
+
 if __name__ == "__main__":
-    # Test cases from user's real conversation
     test_cases = [
-        # From user's actual session
-        ("ok I will give you", None, "HIGH"),
-        ("45,000", None, "HIGH"),
-        ("SBI", None, "HIGH"),
-        ("84567389290", None, "HIGH"),
-        ("I have no money currently", None, "LOW"),
+        # From user's actual conversation
+        ("ok I will give you", "HIGH"),
+        ("45,000", "HIGH"),
+        ("SBI", "HIGH"),
+        ("84567389290", "HIGH"),
+        ("I have no money currently", "LOW"),
         
-        # Scenario-specific tests
-        ("here is my resume", "job_offer", "HIGH"),
-        ("my otp is 123456", "bank", "HIGH"),
-        ("transfer 50000", "relative_emergency", "HIGH"),
-        ("processing fee", "lottery_offer", "HIGH"),
+        # Short affirmatives (implicit compliance)
+        ("ok", "HIGH"),
+        ("yes", "HIGH"),
+        ("done", "HIGH"),
+        ("sent", "HIGH"),
+        ("ok sir", "HIGH"),
+        ("yes ji", "HIGH"),
         
-        # General tests
-        ("hello", None, "LOW"),
-        ("what is this about?", None, "LOW"),
-        ("i'm not sure about this", None, "MEDIUM"),
-        ("is this real?", None, "MEDIUM"),
-        ("ok i am sending", None, "HIGH"),
-        ("sending now", None, "HIGH"),
-        ("my name is John", None, "HIGH"),
-        ("my aadhaar number", None, "HIGH"),
+        # Compliance intent
+        ("ok i am sending", "HIGH"),
+        ("i will send it", "HIGH"),
+        ("let me transfer", "HIGH"),
+        ("sure i will do it", "HIGH"),
+        ("here you go", "HIGH"),
+        ("take my details", "HIGH"),
+        
+        # Data sharing
+        ("my name is John", "HIGH"),
+        ("my aadhaar number", "HIGH"),
+        ("the otp is 123456", "HIGH"),
+        ("my pan card", "HIGH"),
+        ("account number", "HIGH"),
+        
+        # Financial
+        ("from my gpay", "HIGH"),
+        ("hdfc bank", "HIGH"),
+        ("5000 rupees", "HIGH"),
+        ("Rs.10000", "HIGH"),
+        
+        # Hesitation (MEDIUM)
+        ("is this safe?", "MEDIUM"),
+        ("not sure about this", "MEDIUM"),
+        ("sounds suspicious", "MEDIUM"),
+        ("how do i know this is real", "MEDIUM"),
+        
+        # Low risk
+        ("hello", "LOW"),
+        ("what is this about?", "LOW"),
+        ("tell me more", "LOW"),
+        ("who are you?", "LOW"),
+        ("I don't have any documents", "LOW"),
     ]
 
-    print("Running production risk detection tests...")
-    all_passed = True
+    print("=" * 60)
+    print("UNIVERSAL RISK DETECTION ENGINE - TEST SUITE")
+    print("=" * 60)
     
-    for msg, scenario, expected in test_cases:
-        result = detect_risk(msg, scenario)
+    passed = 0
+    failed = 0
+    
+    for msg, expected in test_cases:
+        result = detect_risk(msg)
         status = "✓" if result == expected else "✗"
-        if result != expected:
-            all_passed = False
-        scenario_str = f" [{scenario}]" if scenario else ""
-        print(f"{status} '{msg}'{scenario_str} -> {result} (expected: {expected})")
-
-    print(f"\n{'All tests passed!' if all_passed else 'SOME TESTS FAILED!'}")
+        
+        if result == expected:
+            passed += 1
+        else:
+            failed += 1
+            
+        print(f"{status} '{msg}' -> {result} (expected: {expected})")
+    
+    print("=" * 60)
+    print(f"PASSED: {passed}/{len(test_cases)} | FAILED: {failed}/{len(test_cases)}")
+    print("=" * 60)
