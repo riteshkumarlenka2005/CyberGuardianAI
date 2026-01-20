@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.v1.simulation import router as simulation_router
+from .api.v1.auth import router as auth_router
 
 app = FastAPI(
     title="CyberGuardian AI",
@@ -34,6 +35,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(simulation_router, prefix="/api/v1/simulation", tags=["Simulation"])
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
 
 
 @app.get("/")
@@ -44,3 +46,4 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
