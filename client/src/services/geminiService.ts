@@ -1,83 +1,233 @@
+/**
+ * API Service for CyberGuardian AI
+ * Connects to the local FastAPI backend with Ollama + Mistral
+ */
 
-import { GoogleGenAI, Type } from "@google/genai";
-import { ScenarioType, Message, RiskAnalysis, UserIdentity } from "../types";
+import { ScenarioType, UserIdentity, AgeGroup, RiskAnalysis } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+// Backend API base URL
+const API_BASE_URL = "http://localhost:8000/api/v1";
 
-const SYSTEM_PROMPTS = {
-  [ScenarioType.BANK]: "You are a realistic scammer pretending to be a security officer from Global Bank. Your goal is to get the user to provide their 6-digit OTP or login credentials. Be pushy but professional. Use urgency: 'Your account will be frozen in 10 minutes.'",
-  [ScenarioType.JOB]: "You are a hiring manager for a tech startup. Offer a vague but high-paying job. Eventually ask for a processing fee for 'office equipment' or 'background checks'. Use flattery.",
-  [ScenarioType.GOVERNMENT]: "You are an IRS/Gov agent. Inform the user they have an outstanding tax debt or legal issue. Threaten police involvement if not paid via gift cards or crypto immediately. Use authority and fear.",
-  [ScenarioType.EMERGENCY]: "You are a distraught family member or friend. You're in a crisis (arrested, accident) and need immediate wire transfer for bail/help. Do not use names, use generic terms like 'Grandma' or 'Friend'. Create high emotional distress."
+// Map frontend enums to backend values
+const PERSONA_MAP: Record<UserIdentity, string> = {
+  [UserIdentity.STUDENT]: "student",
+  [UserIdentity.JOB_SEEKER]: "job_seeker",
+  [UserIdentity.SENIOR_CITIZEN]: "senior_citizen",
+  [UserIdentity.TEENAGER]: "teenager",
+  [UserIdentity.GENERAL_USER]: "general",
 };
 
-export class GeminiService {
-  static async getScammerResponse(scenario: ScenarioType, identity: UserIdentity, history: Message[]): Promise<string> {
-    const promptInstructions = `
-      System Instruction: ${SYSTEM_PROMPTS[scenario]}
-      Target Profile: The user is a ${identity.replace('_', ' ').toLowerCase()}. 
-      Tailor your language and psychological pressure specifically to exploit the vulnerabilities of this profile.
-      Keep responses concise and conversational (SMS/Chat style).
-    `;
+const SCENARIO_MAP: Record<ScenarioType, string> = {
+  [ScenarioType.BANK]: "bank",
+  [ScenarioType.GOVERNMENT]: "government",
+  [ScenarioType.JOB]: "job_offer",
+  [ScenarioType.EMERGENCY]: "relative_emergency",
+};
 
-    const chat = ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: [
-        { role: 'user', parts: [{ text: promptInstructions }] },
-        ...history.map(m => ({
-          role: m.role === 'user' ? 'user' : 'model',
-          parts: [{ text: m.content }]
-        }))
-      ]
+const AGE_MAP: Record<AgeGroup, number> = {
+  [AgeGroup.TEEN]: 16,
+  [AgeGroup.YOUNG_ADULT]: 28,
+  [AgeGroup.ADULT]: 45,
+  [AgeGroup.SENIOR]: 65,
+};
+
+// Response types from backend
+interface SimulationResponse {
+  mode: "SIMULATOR" | "MENTOR" | "ENDED";
+  message: string;
+  risk?: "LOW" | "MEDIUM" | "HIGH";
+  session_id?: string;
+  manipulation_tactic?: string;
+  guidance?: string;
+}
+
+// Session storage
+let currentSessionId: string | null = null;
+
+export class ApiService {
+  /**
+   * Start a new simulation session
+   */
+  static async startSimulation(
+    scenario: ScenarioType,
+    identity: UserIdentity,
+    ageGroup?: AgeGroup
+  ): Promise<{ message: string; sessionId: string }> {
+    const response = await fetch(`${API_BASE_URL}/simulation/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        persona: PERSONA_MAP[identity],
+        age: ageGroup ? AGE_MAP[ageGroup] : 30,
+        scenario: SCENARIO_MAP[scenario],
+      }),
     });
 
-    const response = await chat;
-    return response.text || "Connection lost. Please retry.";
+    if (!response.ok) {
+      throw new Error("Failed to start simulation");
+    }
+
+    const data: SimulationResponse = await response.json();
+    currentSessionId = data.session_id || null;
+
+    return {
+      message: data.message,
+      sessionId: data.session_id || "",
+    };
   }
 
-  static async analyzeRisk(scenario: ScenarioType, identity: UserIdentity, userMessage: string): Promise<RiskAnalysis> {
-    const prompt = `Analyze this message from a ${identity} in a ${scenario} scam simulation: "${userMessage}". 
-    Is the user falling for the scam or revealing sensitive data? 
-    Check for: 
-    1. Compliance with risky requests (sending money, giving OTP, clicking links).
-    2. Sharing sensitive info (SSN, Passwords).
-    3. Emotional compliance.
-    
-    Return a JSON object:
-    {
-      "isAtRisk": boolean,
-      "explanation": "Why is this dangerous for a ${identity}?",
-      "manipulationTactic": "The core tactic used (e.g., Urgency, Authority, Fear)",
-      "guidance": "A safe, alternative response."
-    }`;
+  /**
+   * Send a user message and get response
+   */
+  static async sendMessage(
+    message: string,
+    sessionId?: string
+  ): Promise<{
+    mode: "SIMULATOR" | "MENTOR" | "ENDED";
+    message: string;
+    risk?: string;
+    isAtRisk: boolean;
+    explanation?: string;
+    manipulationTactic?: string;
+    guidance?: string;
+  }> {
+    const sid = sessionId || currentSessionId;
+    if (!sid) {
+      throw new Error("No active session");
+    }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            isAtRisk: { type: Type.BOOLEAN },
-            explanation: { type: Type.STRING },
-            manipulationTactic: { type: Type.STRING },
-            guidance: { type: Type.STRING }
-          },
-          required: ['isAtRisk', 'explanation', 'manipulationTactic', 'guidance']
-        }
-      }
+    const response = await fetch(`${API_BASE_URL}/simulation/message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: sid,
+        message: message,
+      }),
     });
 
-    try {
-      return JSON.parse(response.text || '{}') as RiskAnalysis;
-    } catch (e) {
-      return {
-        isAtRisk: false,
-        explanation: '',
-        manipulationTactic: '',
-        guidance: ''
-      };
+    if (!response.ok) {
+      throw new Error("Failed to send message");
     }
+
+    const data: SimulationResponse = await response.json();
+
+    return {
+      mode: data.mode,
+      message: data.message,
+      risk: data.risk,
+      isAtRisk: data.mode === "MENTOR",
+      explanation: data.mode === "MENTOR" ? data.message : undefined,
+      manipulationTactic: data.manipulation_tactic,
+      guidance: data.guidance,
+    };
+  }
+
+  /**
+   * Continue simulation after mentor intervention
+   */
+  static async continueSimulation(sessionId?: string): Promise<{ message: string }> {
+    const sid = sessionId || currentSessionId;
+    if (!sid) {
+      throw new Error("No active session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/simulation/continue`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sid }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to continue simulation");
+    }
+
+    const data: SimulationResponse = await response.json();
+    return { message: data.message };
+  }
+
+  /**
+   * Retry/reset simulation
+   */
+  static async retrySimulation(sessionId?: string): Promise<{ message: string }> {
+    const sid = sessionId || currentSessionId;
+    if (!sid) {
+      throw new Error("No active session");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/simulation/retry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sid }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to retry simulation");
+    }
+
+    currentSessionId = null;
+    const data: SimulationResponse = await response.json();
+    return { message: data.message };
+  }
+
+  /**
+   * Get current session ID
+   */
+  static getSessionId(): string | null {
+    return currentSessionId;
+  }
+
+  /**
+   * Clear current session
+   */
+  static clearSession(): void {
+    currentSessionId = null;
+  }
+}
+
+// Legacy GeminiService replacement - for backwards compatibility during transition
+export class GeminiService {
+  static async getScammerResponse(
+    scenario: ScenarioType,
+    identity: UserIdentity,
+    history: { role: string; content: string }[],
+    ageGroup?: AgeGroup
+  ): Promise<string> {
+    // If no session, start one
+    if (!currentSessionId) {
+      const result = await ApiService.startSimulation(scenario, identity, ageGroup);
+      return result.message;
+    }
+
+    // Get last user message from history
+    const lastUserMsg = [...history].reverse().find(m => m.role === "user");
+    if (lastUserMsg) {
+      const result = await ApiService.sendMessage(lastUserMsg.content);
+      if (result.mode === "SIMULATOR") {
+        return result.message;
+      }
+    }
+
+    return "Continue the conversation...";
+  }
+
+  static async analyzeRisk(
+    scenario: ScenarioType,
+    identity: UserIdentity,
+    userMessage: string,
+    ageGroup?: AgeGroup
+  ): Promise<RiskAnalysis> {
+    // If no session, start one first
+    if (!currentSessionId) {
+      await ApiService.startSimulation(scenario, identity, ageGroup);
+    }
+
+    const result = await ApiService.sendMessage(userMessage);
+
+    return {
+      isAtRisk: result.isAtRisk,
+      explanation: result.explanation || "",
+      manipulationTactic: result.manipulationTactic || result.risk || "",
+      guidance: result.guidance || "",
+    };
   }
 }

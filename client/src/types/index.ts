@@ -14,6 +14,13 @@ export enum UserIdentity {
   TEENAGER = 'TEENAGER'
 }
 
+export enum AgeGroup {
+  TEEN = 'TEEN',           // 13-19 years
+  YOUNG_ADULT = 'YOUNG_ADULT', // 20-35 years
+  ADULT = 'ADULT',         // 36-55 years
+  SENIOR = 'SENIOR'        // 56+ years
+}
+
 export interface Message {
   id: string;
   role: 'scammer' | 'user' | 'mentor';
@@ -43,6 +50,7 @@ export interface TrainingSession {
   timestamp: number;
   scenarioType: ScenarioType;
   identity: UserIdentity;
+  ageGroup?: AgeGroup; // optional for backwards compatibility
   messagesCount: number;
   mentorInterventions: number;
   tacticsEncountered: string[];

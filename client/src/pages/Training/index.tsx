@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { SCENARIOS } from '../../constants';
-import { ScenarioType, UserIdentity, Message, RiskAnalysis } from '../../types';
-import { GeminiService } from '../../services/geminiService';
+import { ScenarioType, UserIdentity, AgeGroup, Message, RiskAnalysis } from '../../types';
+import { GeminiService, ApiService } from '../../services/geminiService';
 import { UserDataService } from '../../services/userDataService';
 import MessageBubble from '../../components/Chat/MessageBubble';
 
@@ -14,9 +14,17 @@ const IDENTITY_OPTIONS = [
   { id: UserIdentity.GENERAL_USER, label: 'General User', icon: '👥' },
 ];
 
+const AGE_GROUP_OPTIONS = [
+  { id: AgeGroup.TEEN, label: 'Teen', subtitle: '13-19 years', icon: '🧑' },
+  { id: AgeGroup.YOUNG_ADULT, label: 'Young Adult', subtitle: '20-35 years', icon: '👨' },
+  { id: AgeGroup.ADULT, label: 'Adult', subtitle: '36-55 years', icon: '🧔' },
+  { id: AgeGroup.SENIOR, label: 'Senior', subtitle: '56+ years', icon: '👴' },
+];
+
 const Training: React.FC = () => {
-  const [step, setStep] = useState<'identity' | 'scenario' | 'active'>('identity');
+  const [step, setStep] = useState<'identity' | 'age' | 'scenario' | 'active'>('identity');
   const [selectedIdentity, setSelectedIdentity] = useState<UserIdentity | null>(null);
+  const [selectedAgeGroup, setSelectedAgeGroup] = useState<AgeGroup | null>(null);
   const [selectedScenario, setSelectedScenario] = useState<ScenarioType | null>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -40,6 +48,11 @@ const Training: React.FC = () => {
 
   const handleIdentitySelect = (id: UserIdentity) => {
     setSelectedIdentity(id);
+    setStep('age');
+  };
+
+  const handleAgeSelect = (id: AgeGroup) => {
+    setSelectedAgeGroup(id);
     setStep('scenario');
   };
 
@@ -56,7 +69,7 @@ const Training: React.FC = () => {
     setMentorInterventions(0);
     setTacticsEncountered([]);
 
-    const firstMsg = await GeminiService.getScammerResponse(type, selectedIdentity!, []);
+    const firstMsg = await GeminiService.getScammerResponse(type, selectedIdentity!, [], selectedAgeGroup || undefined);
     const newMsg: Message = {
       id: Date.now().toString(),
       role: 'scammer',
@@ -82,7 +95,7 @@ const Training: React.FC = () => {
     setInputValue('');
     setIsLoading(true);
 
-    const analysis = await GeminiService.analyzeRisk(selectedScenario, selectedIdentity, inputValue);
+    const analysis = await GeminiService.analyzeRisk(selectedScenario, selectedIdentity, inputValue, selectedAgeGroup || undefined);
 
     if (analysis.isAtRisk) {
       setRisk(analysis);
@@ -97,7 +110,7 @@ const Training: React.FC = () => {
       return;
     }
 
-    const scammerMsg = await GeminiService.getScammerResponse(selectedScenario, selectedIdentity, [...messages, userMsg]);
+    const scammerMsg = await GeminiService.getScammerResponse(selectedScenario, selectedIdentity, [...messages, userMsg], selectedAgeGroup || undefined);
     const responseMsg: Message = {
       id: (Date.now() + 1).toString(),
       role: 'scammer',
@@ -118,6 +131,7 @@ const Training: React.FC = () => {
       UserDataService.saveSession({
         scenarioType: selectedScenario,
         identity: selectedIdentity,
+        ageGroup: selectedAgeGroup || undefined,
         messagesCount: userMessages,
         mentorInterventions: mentorInterventions,
         tacticsEncountered: tacticsEncountered,
@@ -125,10 +139,11 @@ const Training: React.FC = () => {
         duration: duration
       });
     }
+    ApiService.clearSession(); // Clear backend session
     setStep('scenario');
   };
 
-  const restartScenario = () => {
+  const restartScenario = async () => {
     // Save incomplete session before restarting
     if (selectedScenario && selectedIdentity && sessionStartTime > 0 && messages.length > 1) {
       const duration = Math.floor((Date.now() - sessionStartTime) / 1000);
@@ -137,6 +152,7 @@ const Training: React.FC = () => {
       UserDataService.saveSession({
         scenarioType: selectedScenario,
         identity: selectedIdentity,
+        ageGroup: selectedAgeGroup || undefined,
         messagesCount: userMessages,
         mentorInterventions: mentorInterventions,
         tacticsEncountered: tacticsEncountered,
@@ -144,10 +160,22 @@ const Training: React.FC = () => {
         duration: duration
       });
     }
+    // Notify backend to retry
+    try {
+      await ApiService.retrySimulation();
+    } catch (e) {
+      // Session might not exist yet, that's ok
+    }
     if (selectedScenario) startScenario(selectedScenario);
   };
 
-  const continueScenario = () => {
+  const continueScenario = async () => {
+    // Notify backend to continue
+    try {
+      await ApiService.continueSimulation();
+    } catch (e) {
+      // Ignore if no active session
+    }
     setShowMentor(false);
     setRisk(null);
   };
@@ -188,6 +216,50 @@ const Training: React.FC = () => {
     );
   }
 
+  // --- SELECTION SCREEN: AGE GROUP ---
+  if (step === 'age') {
+    return (
+      <div className="pt-28 min-h-screen bg-slate-50 dark:bg-[#02040a] flex items-center justify-center p-6 relative overflow-hidden">
+        {/* Background Grid */}
+        <div className="absolute inset-0 pointer-events-none opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+
+        <div className="max-w-4xl w-full text-center relative z-10">
+          <button onClick={() => setStep('identity')} className="text-blue-500 text-xs font-mono mb-4 hover:underline">← BACK_TO_PROFILE</button>
+          <span className="text-blue-600 dark:text-blue-400 font-mono text-xs tracking-widest uppercase mb-4 block">// INITIALIZATION_PHASE_2</span>
+          <h1 className="text-4xl md:text-5xl font-black mb-6 text-slate-900 dark:text-white uppercase tracking-tighter">Select Your Age Group</h1>
+          <p className="text-slate-500 dark:text-slate-400 mb-16 max-w-lg mx-auto font-medium">This helps tailor scam scenarios and mentor guidance to your age-specific vulnerabilities.</p>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {AGE_GROUP_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => handleAgeSelect(opt.id)}
+                className="group relative h-52 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-purple-500 dark:hover:border-purple-500 transition-all shadow-sm hover:shadow-2xl overflow-hidden flex flex-col items-center justify-center"
+                style={{ clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)' }}
+              >
+                {/* Hover Accent */}
+                <div className="absolute top-0 left-0 w-full h-1 bg-transparent group-hover:bg-purple-500 transition-colors"></div>
+
+                <span className="text-5xl mb-4 group-hover:scale-110 transition-transform filter grayscale group-hover:grayscale-0">{opt.icon}</span>
+                <span className="font-bold text-sm text-slate-900 dark:text-white uppercase tracking-wider mb-2">{opt.label}</span>
+                <span className="text-xs text-slate-400 font-mono">{opt.subtitle}</span>
+
+                {/* Corner Decor */}
+                <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-slate-200 dark:border-slate-700 group-hover:border-purple-500 transition-colors"></div>
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-8 flex justify-center">
+            <div className="px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg">
+              <p className="text-xs font-mono text-slate-400">PROFILE: <span className="text-blue-500 uppercase">{selectedIdentity}</span></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // --- SELECTION SCREEN: SCENARIO (Using Alert Card Style) ---
   if (step === 'scenario') {
     return (
@@ -197,11 +269,12 @@ const Training: React.FC = () => {
         <div className="max-w-6xl w-full relative z-10">
           <div className="flex justify-between items-end mb-12 border-b border-slate-200 dark:border-slate-800 pb-6">
             <div>
-              <button onClick={() => setStep('identity')} className="text-blue-500 text-xs font-mono mb-2 hover:underline">← BACK_TO_PROFILE</button>
+              <button onClick={() => setStep('age')} className="text-blue-500 text-xs font-mono mb-2 hover:underline">← BACK_TO_AGE</button>
               <h1 className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">Mission Select</h1>
             </div>
             <div className="text-right hidden md:block">
               <p className="text-xs font-mono text-slate-400">IDENTITY: <span className="text-blue-500 uppercase">{selectedIdentity}</span></p>
+              <p className="text-xs font-mono text-slate-400">AGE: <span className="text-purple-500 uppercase">{selectedAgeGroup}</span></p>
               <p className="text-xs font-mono text-slate-400">STATUS: <span className="text-green-500">READY</span></p>
             </div>
           </div>
