@@ -1,8 +1,8 @@
 import { ScenarioType, UserIdentity, AgeGroup, RiskAnalysis } from "../types";
 import authService from "./authService";
 
-// Backend API base URL
-const API_BASE_URL = "http://127.0.0.1:8000/api/v1";
+// Backend API base URL - loaded from environment variable
+const API_BASE_URL = `${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/api/v1`;
 
 // helper to get headers with auth
 const getHeaders = () => {

@@ -16,10 +16,11 @@ class User(Base):
     last_name: Mapped[str] = mapped_column(String(100), nullable=True)
     picture: Mapped[str] = mapped_column(String(500), nullable=True)
     
-    # Verification & Status
+    # Email Verification
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
-    verification_token: Mapped[str] = mapped_column(String(100), nullable=True)
+    email_verification_token: Mapped[str] = mapped_column(String(100), nullable=True)
+    email_verification_expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     
     # Auth Provider
     provider: Mapped[str] = mapped_column(String(50), default="local")  # local, google, github
@@ -31,3 +32,4 @@ class User(Base):
 
     def __repr__(self):
         return f"<User {self.email}>"
+

@@ -51,23 +51,44 @@ async def verify_email(
     token: str = Query(...),
     db: AsyncSession = Depends(get_db)
 ):
-    """Verifies user email via link/token."""
-    success = await AuthService.verify_email(db, email, token)
-    if not success:
-        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=invalid_verification_token")
+    """Verifies user email via clickable link (mobile-friendly)."""
+    result = await AuthService.verify_email(db, email, token)
     
-    return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?message=email_verified")
+    if result["success"]:
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?message=email_verified")
+    
+    # Handle specific error cases
+    error_type = result.get("error", "unknown")
+    return RedirectResponse(url=f"{settings.FRONTEND_URL}/verify-email?email={email}&error={error_type}")
 
 @router.post("/verify-email-otp")
 async def verify_email_otp(data: EmailVerification, db: AsyncSession = Depends(get_db)):
-    """Verifies user email via OTP/input."""
-    success = await AuthService.verify_email(db, data.email, data.token)
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired verification token"
-        )
-    return {"message": "Email verified successfully"}
+    """Verifies user email via form submission."""
+    result = await AuthService.verify_email(db, data.email, data.token)
+    
+    if not result["success"]:
+        error_type = result.get("error", "invalid_token")
+        message = result.get("message", "Verification failed")
+        
+        # Return appropriate status code based on error
+        if error_type == "already_verified":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+        elif error_type == "expired_token":
+            raise HTTPException(status_code=status.HTTP_410_GONE, detail=message)
+        else:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+    
+    return {"message": result["message"], "success": True}
+
+@router.post("/resend-verification")
+async def resend_verification(data: dict, db: AsyncSession = Depends(get_db)):
+    """Resend verification email with a new token."""
+    email = data.get("email")
+    if not email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is required")
+    
+    result = await AuthService.resend_verification(db, email)
+    return result
 
 # ================================================
 # GOOGLE OAUTH

@@ -10,6 +10,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from .api.v1.simulation import router as simulation_router
 from .api.v1.auth import router as auth_router
+from .security.config import settings
 
 app = FastAPI(
     title="CyberGuardian AI",
@@ -18,10 +19,10 @@ app = FastAPI(
 )
 
 # Session middleware for OAuth state management
-# IMPORTANT: Change this secret in production!
+# Secret is loaded from environment variable SESSION_SECRET
 app.add_middleware(
     SessionMiddleware,
-    secret_key="cyberguardian-session-secret-change-in-production-use-256-bit",
+    secret_key=settings.SESSION_SECRET,
     session_cookie="cyberguardian_session",
     max_age=3600,  # 1 hour
     same_site="lax",
@@ -41,7 +42,7 @@ async def log_requests(request, call_next):
         print(f"ERROR in middleware: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": str(e)}) # Ensure CORS headers are still added in error case
 
-# CORS middleware - specific settings for local dev
+# CORS middleware - allowing local network for mobile testing
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -49,6 +50,8 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "http://localhost:3001",
         "http://127.0.0.1:3001",
+        "http://172.42.0.53:3000",  # Local network for mobile
+        "http://172.42.0.53:3001",
     ],
     allow_credentials=True,
     allow_methods=["*"],

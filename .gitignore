@@ -54,3 +54,9 @@ coverage/
 # Misc
 *.tsbuildinfo
 .cache/
+
+# Local History
+.history/
+
+# Local Test Scripts
+server/test_email.py
