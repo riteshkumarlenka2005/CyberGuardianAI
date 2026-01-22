@@ -15,8 +15,27 @@ const Signup: React.FC<SignupProps> = ({ onSignup }) => {
     const [isLoading, setIsLoading] = useState<string | null>(null);
     const navigate = useNavigate();
 
+    // Password validation
+    const validatePassword = (pwd: string): string | null => {
+        if (pwd.length < 8) return 'Password must be at least 8 characters';
+        if (pwd.length > 72) return 'Password must not exceed 72 characters';
+        if (!/[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\;'/`~]/.test(pwd)) {
+            return 'Password must contain at least 1 special character';
+        }
+        return null;
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setError(null);
+
+        // Frontend validation
+        const passwordError = validatePassword(password);
+        if (passwordError) {
+            setError(passwordError);
+            return;
+        }
+
         setIsLoading('email');
         try {
             await authService.signup({
@@ -152,6 +171,7 @@ const Signup: React.FC<SignupProps> = ({ onSignup }) => {
                                 <div className="relative">
                                     <input
                                         type="text"
+                                        required
                                         value={firstName}
                                         onChange={(e) => setFirstName(e.target.value)}
                                         className="w-full px-4 py-3 bg-white dark:bg-[#1A202C] border border-slate-200 dark:border-purple-900 text-slate-900 dark:text-white rounded-none focus:border-blue-500 dark:focus:border-purple-500 focus:ring-1 focus:ring-blue-500 dark:focus:ring-purple-500 transition-all outline-none placeholder-slate-300 dark:placeholder-slate-600 font-mono text-sm"
@@ -166,6 +186,7 @@ const Signup: React.FC<SignupProps> = ({ onSignup }) => {
                                 <div className="relative">
                                     <input
                                         type="text"
+                                        required
                                         value={lastName}
                                         onChange={(e) => setLastName(e.target.value)}
                                         className="w-full px-4 py-3 bg-white dark:bg-[#1A202C] border border-slate-200 dark:border-purple-900 text-slate-900 dark:text-white rounded-none focus:border-blue-500 dark:focus:border-purple-500 focus:ring-1 focus:ring-blue-500 dark:focus:ring-purple-500 transition-all outline-none placeholder-slate-300 dark:placeholder-slate-600 font-mono text-sm"
