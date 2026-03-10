@@ -2,6 +2,8 @@
 
 > AI-powered cyber security training platform that helps users recognize and defend against digital manipulation through realistic scam simulations.
 
+[![Deployment Status](https://img.shields.io/badge/Deployment-Verified-success)](https://cyber-guardian-ai.vercel.app)
+
 ## 🎯 Project Overview
 
 CyberGuardian AI transforms digital safety into an active learning experience. Instead of simply warning users, the platform simulates realistic scam scenarios in a controlled environment, allowing people to experience how manipulation unfolds step by step—without any real-world risk.
