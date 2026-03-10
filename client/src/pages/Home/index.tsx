@@ -69,8 +69,8 @@ const TechCard = ({ title, desc, icon, color, stat, level }: { title: string, de
                 <div
                   key={i}
                   className={`flex-1 transform -skew-x-[20deg] ${(i + 1) * 10 <= level
-                      ? color // Active Color
-                      : 'bg-slate-100 dark:bg-slate-800' // Inactive Color
+                    ? color // Active Color
+                    : 'bg-slate-100 dark:bg-slate-800' // Inactive Color
                     }`}
                 />
               ))}
@@ -100,24 +100,27 @@ const CybercrimeCircle = () => {
   ];
 
   return (
-    <div className="relative w-[300px] h-[300px] sm:w-[420px] sm:h-[420px] flex items-center justify-center">
+    <div className="relative w-[280px] h-[280px] xs:w-[320px] xs:h-[320px] sm:w-[420px] sm:h-[420px] flex items-center justify-center">
       {/* Background Rings */}
       <div className="absolute inset-0 border-[1px] border-slate-200 dark:border-slate-800 rounded-full"></div>
-      <div className="absolute inset-8 border-[1px] border-slate-200 dark:border-slate-800 rounded-full"></div>
+      <div className="absolute inset-6 xs:inset-8 border-[1px] border-slate-200 dark:border-slate-800 rounded-full"></div>
 
       {/* Center Figure */}
-      <div className="relative z-20 w-28 h-28 sm:w-40 sm:h-40 bg-white dark:bg-slate-900 rounded-full shadow-2xl flex items-center justify-center border-4 border-slate-100 dark:border-slate-800 overflow-hidden">
+      <div className="relative z-20 w-24 h-24 xs:w-28 xs:h-28 sm:w-40 sm:h-40 bg-white dark:bg-slate-900 rounded-full shadow-2xl flex items-center justify-center border-4 border-slate-100 dark:border-slate-800 overflow-hidden">
         <img
           src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png"
           alt="Hacker Avatar"
-          className="w-20 h-20 sm:w-32 sm:h-32 opacity-90 dark:invert"
+          className="w-16 h-16 xs:w-24 xs:h-24 sm:w-32 sm:h-32 opacity-90 dark:invert"
         />
       </div>
 
       {/* Categories (Calculated positions) */}
       {crimes.map((crime, idx) => {
         const angle = (idx * (360 / crimes.length)) - 90;
-        const radius = 180; // Distance from center - reduced to fit laptop screen better
+        // Adjust radius for mobile
+        const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+        const radius = isMobile ? (window.innerWidth < 400 ? 115 : 140) : 180;
+
         return (
           <div
             key={idx}
@@ -126,9 +129,9 @@ const CybercrimeCircle = () => {
               transform: `rotate(${angle}deg) translate(${radius}px) rotate(-${angle}deg)`
             }}
           >
-            <div className="bg-white dark:bg-slate-900 border-2 border-slate-900 dark:border-white p-1.5 sm:p-3 rounded-xl shadow-lg flex flex-col items-center justify-center min-w-[60px] sm:min-w-[90px]">
-              <span className="text-lg sm:text-xl mb-0.5">{crime.icon}</span>
-              <span className="text-[7px] sm:text-[9px] font-bold uppercase tracking-tighter text-slate-800 dark:text-slate-200 text-center leading-none">
+            <div className="bg-white dark:bg-slate-900 border-2 border-slate-900 dark:border-white p-1 xs:p-1.5 sm:p-3 rounded-lg xs:rounded-xl shadow-lg flex flex-col items-center justify-center min-w-[50px] xs:min-w-[65px] sm:min-w-[90px]">
+              <span className="text-base xs:text-lg sm:text-xl mb-0.5">{crime.icon}</span>
+              <span className="text-[6px] xs:text-[7px] sm:text-[9px] font-bold uppercase tracking-tighter text-slate-800 dark:text-slate-200 text-center leading-none">
                 {crime.name}
               </span>
             </div>
@@ -152,7 +155,7 @@ const Home: React.FC = () => {
     <div className="overflow-hidden bg-white dark:bg-slate-950 transition-colors duration-300 font-sans">
 
       {/* --- HERO SECTION --- */}
-      <section className="relative min-h-[calc(100vh-5rem)] flex items-center pt-20 pb-4 bg-[#f8f9fb] dark:bg-slate-950 overflow-hidden">
+      <section className="relative min-h-[calc(100vh-5rem)] flex items-center pt-20 pb-12 bg-[#f8f9fb] dark:bg-slate-950 overflow-hidden">
 
         {/* Background Graphic Accents */}
         <div className="absolute top-0 right-0 w-[40%] h-full bg-slate-100 dark:bg-slate-900/40 transform -skew-x-12 translate-x-1/2 pointer-events-none"></div>
@@ -160,30 +163,30 @@ const Home: React.FC = () => {
         <div className="max-w-7xl mx-auto px-6 sm:px-12 lg:px-20 w-full flex flex-col lg:flex-row items-center relative z-10">
 
           {/* Left Side: Content */}
-          <div className="lg:w-1/2 text-left mb-6 lg:mb-0">
-            <h1 className="text-4xl md:text-5xl lg:text-[4.8rem] font-bold text-slate-900 dark:text-white leading-[1.05] mb-5 tracking-tighter">
-              Modern <br />
-              Cyber Threats <br />
-              Are Designed To <br />
+          <div className="lg:w-1/2 text-left mb-12 lg:mb-0">
+            <h1 className="text-3xl xs:text-4xl md:text-5xl lg:text-[4.8rem] font-bold text-slate-900 dark:text-white leading-[1.1] md:leading-[1.05] mb-5 tracking-tighter">
+              Modern <br className="hidden xs:block" />
+              Cyber Threats <br className="hidden xs:block" />
+              Are Designed To <br className="hidden xs:block" />
               <span className="text-red-600 drop-shadow-[2px_2px_0_rgba(0,0,0,0.1)] relative inline-block">
                 Manipulate You!!
-                <div className="absolute -bottom-2 left-0 w-full h-2 bg-slate-800 dark:bg-slate-700 -rotate-1"></div>
+                <div className="absolute -bottom-1 xs:-bottom-2 left-0 w-full h-1 xs:h-2 bg-slate-800 dark:bg-slate-700"></div>
               </span>
             </h1>
-            <p className="text-base sm:text-lg text-slate-500 dark:text-slate-400 mb-6 max-w-lg leading-relaxed font-medium">
+            <p className="text-sm xs:text-base sm:text-lg text-slate-500 dark:text-slate-400 mb-8 max-w-lg leading-relaxed font-medium">
               Social engineering and digital manipulation are evolving. Train your internal firewall against modern threats with realistic AI simulations.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-col xs:flex-row gap-4">
               <Link
                 to="/training"
-                className="inline-block px-10 py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-950 font-bold text-base shadow-xl hover:-translate-y-1 transition-all duration-300 uppercase tracking-widest text-center"
+                className="inline-block px-8 sm:px-10 py-3 sm:py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-950 font-bold text-sm sm:text-base shadow-xl hover:-translate-y-1 transition-all duration-300 uppercase tracking-widest text-center"
               >
                 Start Training
               </Link>
               <Link
                 to="/about"
-                className="inline-block px-10 py-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-white border-2 border-slate-900 dark:border-white font-bold text-base hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-300 uppercase tracking-widest text-center"
+                className="inline-block px-8 sm:px-10 py-3 sm:py-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-white border-2 border-slate-900 dark:border-white font-bold text-sm sm:text-base hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-300 uppercase tracking-widest text-center"
               >
                 Learn More
               </Link>

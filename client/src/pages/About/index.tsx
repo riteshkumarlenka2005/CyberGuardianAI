@@ -63,15 +63,12 @@ const About: React.FC = () => {
 
       {/* --- HERO SECTION --- */}
       <section className="max-w-7xl mx-auto px-6 mb-16 relative z-10 text-left">
-        <div className="inline-block px-4 py-1 mb-6 border border-blue-500/30 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-mono text-xs tracking-widest uppercase">
-            // Mission Statement: Validated
-        </div>
         <h1 className="text-5xl md:text-6xl lg:text-[5.5rem] font-bold text-slate-900 dark:text-white leading-[1.1] mb-8 tracking-tighter">
           Transforming Citizens <br />
           Into <span className="text-slate-800 dark:text-slate-300">Resilient</span> <br />
           <span className="text-red-600 drop-shadow-[2px_2px_0_rgba(0,0,0,0.1)] relative inline-block">
             Human Firewalls!!
-            <div className="absolute -bottom-2 left-0 w-full h-2 bg-slate-800 dark:bg-slate-700 -rotate-1"></div>
+            <div className="absolute -bottom-2 left-0 w-full h-2 bg-slate-800 dark:bg-slate-700"></div>
           </span>
         </h1>
         <p className="text-xl text-slate-600 dark:text-slate-400 leading-relaxed max-w-3xl font-medium">

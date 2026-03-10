@@ -94,7 +94,8 @@ async def get_current_user(
         "email": payload.get("email"),
         "name": payload.get("name"),
         "picture": payload.get("picture"),
-        "provider": payload.get("provider")
+        "provider": payload.get("provider"),
+        "role": payload.get("role", "user")
     }
 
 
@@ -113,5 +114,21 @@ async def require_auth(
         "email": payload.get("email"),
         "name": payload.get("name"),
         "picture": payload.get("picture"),
-        "provider": payload.get("provider")
+        "provider": payload.get("provider"),
+        "role": payload.get("role", "user")
     }
+
+
+async def require_admin(
+    user: Dict[str, Any] = Depends(require_auth)
+) -> Dict[str, Any]:
+    """
+    Dependency that requires admin role.
+    Raises 403 if not admin.
+    """
+    if user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    return user

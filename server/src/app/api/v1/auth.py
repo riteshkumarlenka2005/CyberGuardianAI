@@ -32,9 +32,8 @@ async def signup(user_data: UserSignup, db: AsyncSession = Depends(get_db)):
         user, _ = await AuthService.signup(db, user_data)
         return user
     except Exception as e:
-        print(f"SIGNUP ERROR: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        import logging
+        logging.getLogger(__name__).error(f"SIGNUP ERROR: {str(e)}", exc_info=True)
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=str(e))
@@ -161,15 +160,24 @@ async def google_callback(
                 GOOGLE_USERINFO_URL,
                 headers={"Authorization": f"Bearer {token_data['access_token']}"}
             )
-            user_data = userinfo_response.json()
-            user_data["provider"] = "google"
+            user_info = userinfo_response.json()
+            
+            user_data = {
+                "sub": user_info.get("sub") or user_info.get("id"),
+                "email": user_info["email"],
+                "name": user_info.get("name") or user_info.get("given_name", ""),
+                "picture": user_info.get("picture"),
+                "provider": "google"
+            }
             
             jwt_token = await AuthService.handle_oauth_user(db, user_data)
             
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/auth/callback?token={jwt_token}&provider=google"
         )
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"OAUTH CALLBACK ERROR: {str(e)}", exc_info=True)
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=oauth_failed")
 
 # ================================================

@@ -3,13 +3,20 @@ CyberGuardian AI - FastAPI Backend Server
 Main entry point for the API server.
 """
 
+import os
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from .api.v1.simulation import router as simulation_router
 from .api.v1.auth import router as auth_router
+from .api.v1.progress import router as progress_router
+from .api.v1.gallery import router as gallery_router
+from .api.v1.resources import router as resources_router
+from .api.v1.admin import router as admin_router
+from .api.v1.upload import router as upload_router
 from .security.config import settings
 
 app = FastAPI(
@@ -26,7 +33,7 @@ app.add_middleware(
     session_cookie="cyberguardian_session",
     max_age=3600,  # 1 hour
     same_site="lax",
-    https_only=False  # Set to True in production with HTTPS
+    https_only="localhost" not in settings.BACKEND_URL,
 )
 
 # Logging middleware for debugging
@@ -42,17 +49,21 @@ async def log_requests(request, call_next):
         print(f"ERROR in middleware: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": str(e)}) # Ensure CORS headers are still added in error case
 
-# CORS middleware - allowing local network for mobile testing
+# CORS middleware - origins from env for production, with localhost fallbacks for dev
+_cors_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+]
+if settings.CORS_ORIGINS:
+    _cors_origins.extend([o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()])
+if settings.FRONTEND_URL and settings.FRONTEND_URL not in _cors_origins:
+    _cors_origins.append(settings.FRONTEND_URL)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-        "http://172.42.0.53:3000",  # Local network for mobile
-        "http://172.42.0.53:3001",
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,6 +72,16 @@ app.add_middleware(
 # Include routers
 app.include_router(simulation_router, prefix="/api/v1/simulation", tags=["Simulation"])
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
+app.include_router(progress_router, prefix="/api/v1/progress", tags=["Progress"])
+app.include_router(gallery_router, prefix="/api/v1", tags=["Gallery"])
+app.include_router(resources_router, prefix="/api/v1", tags=["Resources"])
+app.include_router(admin_router, prefix="/api/v1", tags=["Admin"])
+app.include_router(upload_router, prefix="/api/v1", tags=["Upload"])
+
+# Serve uploaded files as static
+_upload_dir = os.path.join(os.path.dirname(__file__), "..", "..", "uploads")
+os.makedirs(_upload_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=_upload_dir), name="uploads")
 
 
 @app.get("/")

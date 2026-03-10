@@ -15,6 +15,10 @@ from ..security.config import settings
 from .email_service import send_verification_email
 
 
+# Hardcoded admin email — always gets admin role regardless of DB value
+ADMIN_EMAIL = "lenkariteshkumar2005@gmail.com"
+
+
 def generate_otp_code() -> str:
     """Generate a 6-digit OTP code."""
     return str(random.randint(100000, 999999))
@@ -91,12 +95,14 @@ class AuthService:
             )
 
         # Create JWT token
+        role = "admin" if user.email == ADMIN_EMAIL else (user.role or "user")
         token_data = {
             "sub": str(user.id),
             "email": user.email,
             "name": f"{user.first_name} {user.last_name}",
             "picture": user.picture,
-            "provider": user.provider
+            "provider": user.provider,
+            "role": role
         }
         
         return create_access_token(token_data)
@@ -175,25 +181,34 @@ class AuthService:
         Processes OAuth user (login or create).
         OAuth users are auto-verified (trusted providers).
         """
-        result = await db.execute(select(User).where(User.email == user_data["email"]))
+        email = user_data.get("email")
+        provider_id = user_data.get("sub") or user_data.get("id")
+
+        if not email or not provider_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OAuth provider did not return required user information (email/id)."
+            )
+
+        result = await db.execute(select(User).where(User.email == email))
         user = result.scalar_one_or_none()
 
         if not user:
             # Create new user for OAuth
             user = User(
-                email=user_data["email"],
+                email=email,
                 first_name=user_data.get("name", "").split(" ")[0],
                 last_name=" ".join(user_data.get("name", "").split(" ")[1:]),
                 picture=user_data.get("picture"),
                 provider=user_data["provider"],
-                provider_id=user_data["sub"],
+                provider_id=provider_id,
                 email_verified=True  # Trusted providers are auto-verified
             )
             db.add(user)
         else:
             # Update existing user link if needed
             user.provider = user_data["provider"]
-            user.provider_id = user_data["sub"]
+            user.provider_id = provider_id
             if user_data.get("picture"):
                 user.picture = user_data["picture"]
             # Auto-verify if coming from OAuth
@@ -204,12 +219,14 @@ class AuthService:
         await db.refresh(user)
 
         # Return JWT
+        role = "admin" if user.email == ADMIN_EMAIL else (user.role or "user")
         token_data = {
             "sub": str(user.id),
             "email": user.email,
             "name": f"{user.first_name} {user.last_name}",
             "picture": user.picture,
-            "provider": user.provider
+            "provider": user.provider,
+            "role": role
         }
         return create_access_token(token_data)
 

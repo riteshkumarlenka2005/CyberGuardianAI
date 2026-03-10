@@ -1,6 +1,6 @@
 """
 Simulation API routes.
-Handles scam simulation sessions with the local Ollama + Mistral model.
+Handles scam simulation sessions with the OpenRouter AI API.
 """
 
 from fastapi import APIRouter, HTTPException, Depends

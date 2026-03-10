@@ -7,6 +7,7 @@ import TrustedPartners from '../components/TrustedPartners';
 import Home from '../pages/Home';
 import Training from '../pages/Training';
 import Dashboard from '../pages/Dashboard';
+import AdminDashboard from '../pages/AdminDashboard';
 import About from '../pages/About';
 import Resources from '../pages/Resources';
 import Gallery from '../pages/Gallery';
@@ -19,8 +20,11 @@ import authService from '../services/authService';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    // Check if user is already authenticated
     return authService.isAuthenticated();
+  });
+  const [userRole, setUserRole] = useState<string>(() => {
+    const user = authService.getCurrentUser();
+    return (user as any)?.role || 'user';
   });
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('theme');
@@ -41,11 +45,14 @@ const App: React.FC = () => {
 
   const handleLogin = () => {
     setIsAuthenticated(true);
+    const user = authService.getCurrentUser();
+    setUserRole((user as any)?.role || 'user');
   };
 
   const handleLogout = () => {
     authService.clearAuth();
     setIsAuthenticated(false);
+    setUserRole('user');
   };
 
   return (
@@ -78,7 +85,15 @@ const App: React.FC = () => {
             />
             <Route
               path="/dashboard"
-              element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />}
+              element={isAuthenticated
+                ? (userRole === 'admin' ? <AdminDashboard /> : <Dashboard />)
+                : <Navigate to="/login" />}
+            />
+            <Route
+              path="/admin"
+              element={isAuthenticated && userRole === 'admin'
+                ? <AdminDashboard />
+                : <Navigate to="/dashboard" />}
             />
           </Routes>
         </main>

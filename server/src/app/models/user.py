@@ -26,6 +26,9 @@ class User(Base):
     provider: Mapped[str] = mapped_column(String(50), default="local")  # local, google, github
     provider_id: Mapped[str] = mapped_column(String(255), nullable=True)  # ID from OAuth provider
     
+    # Role
+    role: Mapped[str] = mapped_column(String(20), default="user")  # user, admin
+    
     # Metadata
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

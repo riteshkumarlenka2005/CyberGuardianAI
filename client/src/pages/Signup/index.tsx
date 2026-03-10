@@ -165,7 +165,7 @@ const Signup: React.FC<SignupProps> = ({ onSignup }) => {
                     <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
 
                         {/* Name Grid */}
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="group">
                                 <label className="block text-xs font-bold text-slate-500 dark:text-purple-400 uppercase tracking-wider mb-2 group-focus-within:text-blue-600 dark:group-focus-within:text-white transition-colors">First Name</label>
                                 <div className="relative">

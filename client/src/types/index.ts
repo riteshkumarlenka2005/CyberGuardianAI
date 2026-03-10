@@ -102,3 +102,48 @@ export interface UserStats {
   score: number;
   badges: string[];
 }
+
+// Gallery item from API
+export interface GalleryItem {
+  id: number;
+  title: string;
+  image_url: string;
+  category: string;
+  frame_type: string;
+  display_order: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+// Resource types from API
+export interface ResourceAlert {
+  id: number;
+  title: string;
+  tag: string;
+  date_text: string;
+  display_order: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ResourceVideo {
+  id: number;
+  title: string;
+  thumbnail_url: string;
+  video_url: string;
+  duration: string;
+  label: string;
+  display_order: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ResourceLink {
+  id: number;
+  name: string;
+  url: string;
+  category: string;
+  display_order: number;
+  is_active: boolean;
+  created_at: string;
+}

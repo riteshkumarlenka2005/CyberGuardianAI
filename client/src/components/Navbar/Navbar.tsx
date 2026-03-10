@@ -62,11 +62,11 @@ const Navbar: React.FC<NavbarProps> = ({
       <div className="relative z-10 w-full h-20 flex items-stretch bg-white dark:bg-slate-950">
 
         {/* LEFT — CIRCULAR LOGO & BRAND TEXT */}
-        <div className="relative flex-shrink-0 flex items-center pl-4 sm:pl-8">
-          <Link to="/" className="flex items-center gap-3 sm:gap-5 group">
-            <div className="relative flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 bg-black dark:bg-white rounded-full border-4 border-white dark:border-slate-900 shadow-2xl transition-transform group-hover:scale-105">
+        <div className="relative flex-shrink-0 flex items-center pl-4 sm:pl-8 pr-2">
+          <Link to="/" className="flex items-center gap-2 sm:gap-5 group">
+            <div className="relative flex-shrink-0 flex items-center justify-center w-12 h-12 sm:w-20 sm:h-20 bg-black dark:bg-white rounded-full border-2 sm:border-4 border-white dark:border-slate-900 shadow-2xl transition-transform group-hover:scale-105">
               {/* SHIELD LOGO SVG */}
-              <svg viewBox="0 0 100 100" className="w-9 h-9 sm:w-11 sm:h-11 text-white dark:text-black fill-current relative z-10">
+              <svg viewBox="0 0 100 100" className="w-6 h-6 sm:w-11 sm:h-11 text-white dark:text-black fill-current relative z-10">
                 <path d="M50 5 L89 27.5 L89 72.5 L50 95 L11 72.5 L11 27.5 Z" stroke="currentColor" strokeWidth="2" strokeOpacity="0.3" fill="none" />
                 <path d="M50 25 C50 25 30 28 30 45 C30 65 50 80 50 80 C50 80 70 65 70 45 C70 28 50 25 50 25Z" fill="currentColor" />
                 <path d="M40 48 L50 40 L60 48" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="dark:stroke-black" />
@@ -89,14 +89,14 @@ const Navbar: React.FC<NavbarProps> = ({
                 />
               </svg>
             </div>
-            <span className="text-black dark:text-white font-black text-sm sm:text-xl uppercase tracking-tighter">
+            <span className="text-black dark:text-white font-black text-[10px] xs:text-xs sm:text-xl uppercase tracking-tighter whitespace-nowrap">
               CyberGuardian AI
             </span>
           </Link>
         </div>
 
         {/* CENTER — NAV LINKS */}
-        <div className="flex-grow flex items-center justify-center border-y-2 border-black dark:border-white">
+        <div className="flex-grow flex items-center justify-end md:justify-center border-y-2 border-black dark:border-white">
           <div className="hidden md:flex items-center gap-10 relative">
             <div className="absolute -inset-x-6 top-1/2 h-6 -mt-3 border-l border-r border-black/20 dark:border-white/20" />
 
@@ -123,9 +123,9 @@ const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* MOBILE TOGGLE (HAMBURGER / CROSS) */}
-          <div className="md:hidden flex items-center gap-4 px-4">
+          <div className="md:hidden flex items-center gap-2 px-2 sm:px-4">
             <button
-              className="text-black dark:text-white text-2xl"
+              className="w-10 h-10 flex items-center justify-center text-black dark:text-white text-2xl hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               aria-label="Toggle Menu"
             >

@@ -1,5 +1,8 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import type { GalleryItem } from '../../types';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 // --- FRAME 1: The "Cyan Bracket" Layout ---
 const FrameTypeA = ({ children, label }: { children: React.ReactNode, label: string }) => (
@@ -98,35 +101,19 @@ const FrameTypeD = ({ children, label }: { children: React.ReactNode, label: str
 
 
 const Gallery: React.FC = () => {
-  const visuals = [
-    { title: "Phishing", url: "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=800&q=80" },
-    { title: "Ransomware", url: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=800&q=80" },
-    { title: "Firewall", url: "https://images.unsplash.com/photo-1558494949-efdeb6bf80d1?auto=format&fit=crop&w=800&q=80" },
-    { title: "Encryption", url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80" },
-    { title: "Biometrics", url: "https://images.unsplash.com/photo-1589578527966-fd74306541db?auto=format&fit=crop&w=800&q=80" },
-    { title: "Cloud Sec", url: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=800&q=80" },
-    { title: "Malware", url: "https://images.unsplash.com/photo-1590422501099-2a945b0a5a54?auto=format&fit=crop&w=800&q=80" },
-    { title: "Identity", url: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=800&q=80" },
-    { title: "Network", url: "https://images.unsplash.com/photo-1544197150-b99a580bb7f8?auto=format&fit=crop&w=800&q=80" },
-    { title: "Servers", url: "https://images.unsplash.com/photo-1558494949-efdeb6bf80d1?auto=format&fit=crop&w=800&q=80" },
-    { title: "Coding", url: "https://images.unsplash.com/photo-1542831371-29b0f74f9713?auto=format&fit=crop&w=800&q=80" },
-    { title: "Hacking", url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80" },
-    { title: "IoT", url: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80" },
-    { title: "Botnet", url: "https://images.unsplash.com/photo-1531297461136-82048dfa0ab5?auto=format&fit=crop&w=800&q=80" },
-    { title: "Zero Day", url: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=800&q=80" },
-    { title: "AI Threat", url: "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?auto=format&fit=crop&w=800&q=80" },
-    { title: "Hardware", url: "https://images.unsplash.com/photo-1591453089816-0fbb971b454c?auto=format&fit=crop&w=800&q=80" },
-    { title: "Data Flow", url: "https://images.unsplash.com/photo-1504384308090-c54be3855833?auto=format&fit=crop&w=800&q=80" },
-    { title: "Secure", url: "https://images.unsplash.com/photo-1614064641938-3bbee52942c7?auto=format&fit=crop&w=800&q=80" },
-    { title: "Lock", url: "https://images.unsplash.com/photo-1555949963-ff9fe0c870eb?auto=format&fit=crop&w=800&q=80" },
-    { title: "Circuit", url: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80" },
-    { title: "Analysis", url: "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?auto=format&fit=crop&w=800&q=80" },
-    { title: "Protocol", url: "https://images.unsplash.com/photo-1551609189-eb7196396b91?auto=format&fit=crop&w=800&q=80" },
-    { title: "Defense", url: "https://images.unsplash.com/photo-1562577309-4932fdd64cd1?auto=format&fit=crop&w=800&q=80" },
-  ];
+  const [items, setItems] = useState<GalleryItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const renderFrame = (index: number, children: React.ReactNode, label: string) => {
-    const type = index % 4;
+  useEffect(() => {
+    fetch(`${API_URL}/api/v1/gallery/`)
+      .then(r => r.json())
+      .then(data => { setItems(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const renderFrame = (item: GalleryItem, index: number, children: React.ReactNode, label: string) => {
+    const frameMap: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
+    const type = frameMap[item.frame_type] ?? (index % 4);
     switch (type) {
         case 0: return <FrameTypeA label={label}>{children}</FrameTypeA>;
         case 1: return <FrameTypeB label={label}>{children}</FrameTypeB>;
@@ -148,40 +135,47 @@ const Gallery: React.FC = () => {
         
         <header className="mb-12 flex flex-col md:flex-row justify-between items-start border-b border-slate-200 dark:border-slate-800 pb-6">
           <div>
-              <span className="text-blue-600 dark:text-blue-500 font-mono text-xs tracking-widest uppercase mb-2 block">// VISUAL DATABASE_V1.0</span>
               <h1 className="text-5xl md:text-6xl lg:text-[5.5rem] font-bold text-slate-900 dark:text-white leading-[1.1] mb-4 tracking-tighter">
                 Visual <span className="text-slate-800 dark:text-slate-300">Threat</span> <br />
                 <span className="text-red-600 drop-shadow-[2px_2px_0_rgba(0,0,0,0.1)] relative inline-block">
                   Intelligence!!
-                  <div className="absolute -bottom-2 left-0 w-full h-2 bg-slate-800 dark:bg-slate-700 -rotate-1"></div>
+                  <div className="absolute -bottom-2 left-0 w-full h-2 bg-slate-800 dark:bg-slate-700"></div>
                 </span>
               </h1>
           </div>
           <div className="text-right hidden md:block self-end pb-8">
               <p className="text-slate-500 font-mono text-xs uppercase tracking-tight">SYSTEM STATUS: <span className="text-green-600 dark:text-green-500 font-bold">ONLINE</span></p>
-              <p className="text-slate-500 font-mono text-xs uppercase tracking-tight">NODES ACTIVE: <span className="text-slate-900 dark:text-white font-bold">24</span></p>
+              <p className="text-slate-500 font-mono text-xs uppercase tracking-tight">NODES ACTIVE: <span className="text-slate-900 dark:text-white font-bold">{items.length}</span></p>
           </div>
         </header>
 
-        <div className="grid grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4 lg:gap-6">
-          {visuals.map((visual, idx) => (
-            <div key={idx} 
-                 className="relative h-[115px] lg:h-[300px] w-full transition-all duration-300 hover:scale-[1.02] hover:z-50 cursor-pointer"
-            >
-                {renderFrame(idx, (
-                    <div className="w-full h-full relative">
-                        <img 
-                            src={visual.url} 
-                            alt={visual.title} 
-                            className="w-full h-full object-cover filter grayscale hover:grayscale-0 transition-all duration-500 opacity-80 hover:opacity-100"
-                        />
-                        {/* Overlay Scanline Effect */}
-                        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/dark-scan.png')] opacity-20 pointer-events-none"></div>
-                    </div>
-                ), visual.title)}
-            </div>
-          ))}
-        </div>
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        ) : items.length === 0 ? (
+          <div className="text-center py-20 text-slate-500 font-mono text-sm">NO VISUAL DATA AVAILABLE</div>
+        ) : (
+          <div className="grid grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4 lg:gap-6">
+            {items.map((item, idx) => (
+              <div key={item.id} 
+                   className="relative h-[115px] lg:h-[300px] w-full transition-all duration-300 hover:scale-[1.02] hover:z-50 cursor-pointer"
+              >
+                  {renderFrame(item, idx, (
+                      <div className="w-full h-full relative">
+                          <img 
+                              src={item.image_url} 
+                              alt={item.title} 
+                              className="w-full h-full object-cover filter grayscale hover:grayscale-0 transition-all duration-500 opacity-80 hover:opacity-100"
+                          />
+                          {/* Overlay Scanline Effect */}
+                          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/dark-scan.png')] opacity-20 pointer-events-none"></div>
+                      </div>
+                  ), item.title)}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Footer Data Line */}
         <div className="mt-12 border-t border-slate-200 dark:border-slate-800 pt-4 flex justify-between text-[10px] text-slate-500 dark:text-slate-600 font-mono uppercase tracking-widest">

@@ -8,11 +8,10 @@ from typing import Dict, Optional
 import sys
 import os
 
-# Add project root to path for ai module imports
-# Project structure: CyberGuardianAI/server/src/app/services/session_store.py
-# ai module is at: CyberGuardianAI/ai/
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..'))
-sys.path.insert(0, project_root)
+# Ensure server root is on sys.path so "ai" package is importable
+_server_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+if _server_root not in sys.path:
+    sys.path.insert(0, _server_root)
 
 from ai.controller.simulation_controller import SimulationController
 

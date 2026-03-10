@@ -25,6 +25,7 @@ class UserResponse(BaseModel):
     picture: Optional[str]
     email_verified: bool
     provider: str
+    role: str = "user"
 
     class Config:
         from_attributes = True

@@ -195,7 +195,8 @@ class AuthService {
                 email: payload.email,
                 name: payload.name,
                 picture: payload.picture,
-                provider: payload.provider
+                provider: payload.provider,
+                role: payload.role || 'user'
             } as any;
         } catch {
             return null;

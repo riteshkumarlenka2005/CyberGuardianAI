@@ -72,17 +72,20 @@ const Dashboard: React.FC = () => {
   const [score, setScore] = useState<number>(0);
 
   useEffect(() => {
-    // Load real user data
-    const userProgress = UserDataService.loadProgress();
-    setProgress(userProgress);
+    const loadData = async () => {
+      // Load real user data from API
+      const userProgress = await UserDataService.loadProgress();
+      setProgress(userProgress);
 
-    // Get chart data for last 7 days
-    const data = UserDataService.getChartData(7);
-    setChartData(data);
+      // Get chart data for last 7 days
+      const data = await UserDataService.getChartData(7);
+      setChartData(data);
 
-    // Calculate safety score
-    const safetyScore = UserDataService.calculateScore();
-    setScore(safetyScore);
+      // Calculate safety score
+      const safetyScore = await UserDataService.calculateScore();
+      setScore(safetyScore);
+    };
+    loadData();
   }, []);
 
   // Calculate stats from real data
