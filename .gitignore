@@ -60,3 +60,12 @@ coverage/
 
 # Local Test Scripts
 server/test_email.py
+
+# Uploads & Temp
+server/uploads/
+tmp/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
